@@ -16,8 +16,8 @@ async function handleShareData(shareData, user_id, timestamp, meetingUuid) {
 
     let buffer = Buffer.from(shareData, 'base64');
 
-    // Sanitize meetingUuid for safe folder names
-    const safeMeetingUuid = meetingUuid.toString().replace(/[^\w-]/g, '_') || 'unknown';
+    // Sanitize meetingUuid for safe folder names (preserve + character as it's valid)
+    const safeMeetingUuid = meetingUuid.toString().replace(/[<>:"\/\\|?*=\s]/g, '_') || 'unknown';
 
     // Initialize session state if not exists
     if (!meetingSessions.has(meetingUuid)) {
@@ -127,8 +127,8 @@ async function generatePDFAndText(meetingUuid) {
         return;
     }
 
-    // Sanitize meetingUuid for safe folder names
-    const safeMeetingUuid = meetingUuid.toString().replace(/[^\w-]/g, '_') || 'unknown';
+    // Sanitize meetingUuid for safe folder names (preserve + character as it's valid)
+    const safeMeetingUuid = meetingUuid.toString().replace(/[<>:"\/\\|?*=\s]/g, '_') || 'unknown';
 
     console.log(`Generating PDF for meeting ${safeMeetingUuid} with ${session.uniqueFrames.length} frames`);
 
@@ -136,15 +136,49 @@ async function generatePDFAndText(meetingUuid) {
     const pdfPath = path.join(processedDir, 'approved.pdf');
     const txtPath = path.join(processedDir, 'frames.txt');
 
-    // Create PDF
-    const doc = new PDFDocument();
+    // Create PDF with 16:9 aspect ratio (typical monitor) for optimal screen share display
+    const MONITOR_ASPECT_RATIO = 16 / 9; // Standard 16:9 widescreen monitor ratio
+    const pageWidthPoints = 595; // Standard width matching A4-ish dimensions
+    const pageHeightPoints = pageWidthPoints / MONITOR_ASPECT_RATIO; // ≈ 333.75 points
+
+    const doc = new PDFDocument({
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+        size: [pageWidthPoints, pageHeightPoints] // Custom 16:9 page size
+    });
     doc.pipe(fs.createWriteStream(pdfPath));
+
+    console.log(`Creating PDF with 16:9 monitor aspect ratio: ${pageWidthPoints}x${pageHeightPoints} points`);
 
     for (const frame of session.uniqueFrames) {
         try {
-            // Add image to PDF (assuming A4, scale as needed)
-            doc.image(frame.filePath, 0, 0, { width: 600 });
-            doc.addPage();
+            // Get image dimensions to fit properly
+            const imageInfo = await sharp(frame.filePath).metadata();
+            const imageRatio = imageInfo.width / imageInfo.height;
+            const pageRatio = pageWidthPoints / pageHeightPoints;
+
+            let width, height, x, y;
+
+            if (imageRatio > pageRatio) {
+                // Image is wider than page ratio, fit to width
+                width = pageWidthPoints;
+                height = width / imageRatio;
+                x = 0;
+                y = (pageHeightPoints - height) / 2; // Center vertically
+            } else {
+                // Image is taller than page ratio, fit to height
+                height = pageHeightPoints;
+                width = height * imageRatio;
+                x = (pageWidthPoints - width) / 2; // Center horizontally
+                y = 0;
+            }
+
+            // Add image to fill the page
+            doc.image(frame.filePath, x, y, { width: width, height: height });
+
+            // Only add a new page if there are more images
+            if (session.uniqueFrames.indexOf(frame) < session.uniqueFrames.length - 1) {
+                doc.addPage({ margins: { top: 0, bottom: 0, left: 0, right: 0 } });
+            }
         } catch (error) {
             console.error(`Error adding image ${frame.filePath} to PDF:`, error);
         }

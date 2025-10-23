@@ -136,6 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let speakerTimelineData = [];
   let currentTranscriptElements = [];
   let timelineSvg = null;
+  let availableVideoMeetings = []; // Store filtered meetings from search results
 
   // Function to parse speaker name from transcript text
   const parseSpeakerName = (text) => {
@@ -974,10 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (topicsLoaded) {
       console.log('Topics loaded successfully - enabling search functionality');
 
-      // Load video meetings dropdown
-      loadVideoMeetings();
-
-      // Now load summary files
+      // Load summary files (don't load ALL video meetings - only from search results)
       loadSummaryFiles();
 
       // Try to connect to real-time WebSocket with current meeting UUID or global
@@ -988,7 +986,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       console.error('Failed to load topics - search functionality may be limited');
       // Still allow basic functionality even if topics fail
-      loadVideoMeetings();
       loadSummaryFiles();
       connectRealTimeWebSocket('global');
     }
