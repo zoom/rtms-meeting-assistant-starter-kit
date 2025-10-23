@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import WebSocket from 'ws';
 import dotenv from 'dotenv';
+import helmet from 'helmet';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
@@ -42,6 +43,23 @@ app.use(express.urlencoded({ extended: true }));
 
 // Serve static files (HTML, JS, etc.)
 app.use(express.static(__dirname));
+
+
+app.use(helmet());
+
+app.use((req, res, next) => {
+  res.setHeader(
+    "Strict-Transport-Security",
+    "max-age=31536000; includeSubDomains"
+  );
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none';"
+  );
+  next();
+});
 
 // Map to keep track of active WebSocket connections and audio chunks
 const activeConnections = new Map();
@@ -543,12 +561,12 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
         saveRawVideoAdvance(buffer, user_name, timestamp, meetingUuid); // Primary method
       }
       //  Handle sharescreen data
-      // if (msg.msg_type === 16 && msg.content && msg.content.data) {
-      //   let epochMilliseconds = Date.now();
-      //   let { user_id, user_name, data: imgData, timestamp } = msg.content;
-      //   let buffer = Buffer.from(imgData, 'base64');
-      //   console.log(msg.content);
-      // }
+      if (msg.msg_type === 16 && msg.content && msg.content.data) {
+        let epochMilliseconds = Date.now();
+        let { user_id, user_name, data: imgData, timestamp } = msg.content;
+        let buffer = Buffer.from(imgData, 'base64');
+        console.log(msg.content);
+      }
          if (msg.msg_type === 16) {
         console.log('Sharescreen data received:', msg.content);
       }
