@@ -633,11 +633,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update dialog suggestions
         const dialogDiv = document.getElementById('rt-dialog-suggestions');
         if (data.suggestions && data.suggestions.length > 0) {
-          dialogDiv.innerHTML = data.suggestions.map((suggestion, index) =>
-            `<div style="margin-bottom: 10px;">
-              <strong>${index + 1}.</strong> ${suggestion}
-            </div>`
-          ).join('');
+        dialogDiv.innerHTML = data.suggestions.map((suggestion, index) =>
+          `<div style="margin-bottom: 10px; border: 3px outset #008080; padding: 8px; background-color: #0000FF;">
+            <strong style="color: #FFFF00;">${index + 1}.</strong> ${suggestion}
+          </div>`
+        ).join('');
         } else {
           dialogDiv.innerHTML = '<p>No suggestions available at this time.</p>';
         }

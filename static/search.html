@@ -225,7 +225,7 @@
   border: 1px solid #e9ecef;
   border-radius: 6px;
   padding: 12px;
-  height: 200px;
+  height: 300px;
   overflow-y: auto;
   font-family: monospace;
   font-size: 14px;
@@ -234,12 +234,14 @@
 }
 
 .rt-dialog-content {
-  background-color: #fff3cd;
-  border: 1px solid #ffeaa7;
-  border-radius: 6px;
-  padding: 12px;
-  height: 150px;
+  background-color: #000080; /* 90s RPG dark blue */
+  color: #00FFFF; /* Cyan text */
+  border: 2px outset #008080; /* Greenish outset border */
+  border-radius: 0; /* Remove round corners for retro look */
+  padding: 15px;
+  height: 200px;
   overflow-y: auto;
+  font-family: 'Courier New', monospace; /* Monospace font */
 }
 
 .rt-dialog-content p {
@@ -395,7 +397,7 @@
             <div class="rt-panel sentiment-panel">
               <h4>Sentiment Analysis</h4>
               <div id="rt-sentiment-container">
-                <div id="rt-sentiment-chart" style="height: 200px;"></div>
+                <div id="rt-sentiment-chart" style="height: 250px;"></div>
                 <div id="rt-sentiment-info" style="margin-top: 10px;"></div>
               </div>
             </div>
@@ -418,7 +420,7 @@
                   <input type="text" id="rt-query-input" placeholder="Ask about the current meeting..." style="margin-bottom: 10px;">
                   <button id="rt-query-button" style="width: 100%;">Ask AI</button>
                 </div>
-                <div id="rt-query-results" class="results" style="margin-top: 10px; min-height: 100px;"></div>
+                <div id="rt-query-results" class="results" style="margin-top: 10px; min-height: 200px;"></div>
               </div>
             </div>
           </div>

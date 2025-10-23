@@ -15,10 +15,11 @@ Provide 4 actionable conversation directions that would most benefit this meetin
 - **Drive progress** - what concrete next steps would move this forward?
 
 ## Style
-Give a short sentence with bracket to suggest why the person should say that
+Give a short sentence which is easy and fast to understand
 
 ## Current Meeting Transcript
 {{meeting_transcript}}
 
 ## Format Your Response
 Return exactly 4 suggestions, one per line. Each should be a full sentence that describes the suggested conversation direction. Make them compelling and actionable like RPG quest options.
+Limit to around 10-15 words each
