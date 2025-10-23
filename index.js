@@ -593,7 +593,7 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
         //console.log(`Processing video data for user ${user_name} (ID: ${user_id}), buffer size: ${buffer.length} bytes`);
         saveRawVideoAdvance(buffer, user_name, timestamp, meetingUuid); // Primary method
       }
-<<<<<<< HEAD
+// <<<<<<< HEAD
       //  Handle sharescreen data
       if (msg.msg_type === 16 && msg.content && msg.content.data) {
         let epochMilliseconds = Date.now();
