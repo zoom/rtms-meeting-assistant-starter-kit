@@ -603,7 +603,7 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
       }
          if (msg.msg_type === 16) {
         console.log('Sharescreen data received:', msg.content);
-=======
+
       // Handle sharescreen data
       if (msg.msg_type === 16 && msg.content && msg.content.data) {
         let epochMilliseconds = Date.now();
