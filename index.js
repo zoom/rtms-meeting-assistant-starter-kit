@@ -2,8 +2,8 @@ import express from 'express';
 import crypto from 'crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
-import helmet from 'helmet';
 import fs from 'fs';
+import helmet from 'helmet';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -46,8 +46,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
 
-app.use(helmet());
-
 app.use((req, res, next) => {
   res.setHeader(
     "Strict-Transport-Security",
@@ -61,6 +59,12 @@ app.use((req, res, next) => {
   );
   next();
 });
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(express.static(path.join(__dirname, 'static')));
+
 
 // Map to keep track of active WebSocket connections and audio chunks
 const activeConnections = new Map();
@@ -593,24 +597,12 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
         //console.log(`Processing video data for user ${user_name} (ID: ${user_id}), buffer size: ${buffer.length} bytes`);
         saveRawVideoAdvance(buffer, user_name, timestamp, meetingUuid); // Primary method
       }
-// <<<<<<< HEAD
-      //  Handle sharescreen data
-      if (msg.msg_type === 16 && msg.content && msg.content.data) {
-        let epochMilliseconds = Date.now();
-        let { user_id, user_name, data: imgData, timestamp } = msg.content;
-        let buffer = Buffer.from(imgData, 'base64');
-        console.log(msg.content);
-      }
-         if (msg.msg_type === 16) {
-        console.log('Sharescreen data received:', msg.content);
-
       // Handle sharescreen data
       if (msg.msg_type === 16 && msg.content && msg.content.data) {
         let epochMilliseconds = Date.now();
         let { user_id, user_name, data: imgData, timestamp } = msg.content;
         // Call handleShareData to process and save unique screen share images
         handleShareData(imgData, user_id, Date.now(), meetingUuid).catch(err => console.error('Error handling share data:', err));
->>>>>>> 381dbef09450c7a43482fd806ef1703c4c44a861
       }
       // Handle transcript data
       if (msg.msg_type === 17 && msg.content && msg.content.data) {
