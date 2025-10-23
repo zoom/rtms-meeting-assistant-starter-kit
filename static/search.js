@@ -132,25 +132,165 @@ document.addEventListener('DOMContentLoaded', () => {
     return h * 3600 + m * 60 + s + Number(ms) / 1000;
   };
 
+  // Global variables for speaker timeline
+  let speakerTimelineData = [];
+  let currentTranscriptElements = [];
+  let timelineSvg = null;
+
+  // Function to parse speaker name from transcript text
+  const parseSpeakerName = (text) => {
+    // Look for patterns like "Speaker Name: " or "John Doe: "
+    const speakerMatch = text.match(/^([^:]+):\s*/);
+    if (speakerMatch) {
+      return speakerMatch[1].trim();
+    }
+    return 'Unknown Speaker';
+  };
+
+  // Function to create speaker timeline visualization
+  const createSpeakerTimeline = (timelineData, totalDuration) => {
+    const container = d3.select('#speaker-timeline');
+    container.html(''); // Clear
+
+    const margin = { top: 20, right: 80, bottom: 30, left: 120 };
+    const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+    const height = 100 - margin.top - margin.bottom;
+
+    // Create SVG
+    timelineSvg = container
+      .append('svg')
+      .attr('width', width + margin.left + margin.right)
+      .attr('height', height + margin.top + margin.bottom)
+      .append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Create scales
+    const xScale = d3.scaleLinear()
+      .domain([0, totalDuration])
+      .range([0, width]);
+
+    const yScale = d3.scaleBand()
+      .domain(timelineData.map(d => d.speaker))
+      .range([0, height])
+      .padding(0.1);
+
+    const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+    // Add axes
+    timelineSvg.append('g')
+      .attr('transform', `translate(0,${height})`)
+      .call(d3.axisBottom(xScale)
+        .tickFormat(d => {
+          const minutes = Math.floor(d / 60);
+          const seconds = Math.floor(d % 60);
+          return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }));
+
+    timelineSvg.append('g')
+      .call(d3.axisLeft(yScale));
+
+    // Add speaker bars
+    timelineSvg.selectAll('.speaker-bar')
+      .data(timelineData)
+      .enter()
+      .append('rect')
+      .attr('class', 'speaker-bar')
+      .attr('x', d => xScale(d.start))
+      .attr('y', d => yScale(d.speaker))
+      .attr('width', d => Math.max(2, xScale(d.end) - xScale(d.start)))
+      .attr('height', yScale.bandwidth())
+      .attr('fill', d => colorScale(d.speaker))
+      .attr('rx', 2)
+      .style('cursor', 'pointer')
+      .on('click', function(event, d) {
+        videoPlayer.currentTime = d.start;
+      });
+
+    // Add time indicator line
+    const timeIndicator = timelineSvg.append('line')
+      .attr('class', 'time-indicator')
+      .attr('x1', 0)
+      .attr('x2', 0)
+      .attr('y1', 0)
+      .attr('y2', height)
+      .attr('stroke', 'red')
+      .attr('stroke-width', 2);
+
+    // Update time indicator position
+    const updateTimeIndicator = () => {
+      if (timelineSvg && !isNaN(videoPlayer.currentTime)) {
+        const xPos = xScale(videoPlayer.currentTime);
+        timeIndicator.attr('x1', xPos).attr('x2', xPos);
+      }
+    };
+
+    // Update on timeupdate
+    videoPlayer.addEventListener('timeupdate', updateTimeIndicator);
+    return updateTimeIndicator;
+  };
+
   // Function to populate transcript with clickable lines
   const populateTranscript = (text) => {
     transcriptDiv.innerHTML = ''; // Clear
+    currentTranscriptElements = []; // Reset for highlighting
+    speakerTimelineData = []; // Reset timeline data
+
     const lines = text.split('\n');
     let currentCue = null;
     let cueText = '';
+    let totalDuration = 0;
+
     lines.forEach(line => {
       if (line.trim() === 'WEBVTT') {
         // Skip header
       } else if (line.includes('-->')) { // time line
         if (currentCue && cueText) {
-          createCueElement(currentCue, cueText);
+          const element = createCueElement(currentCue, cueText.trim());
+          const speaker = parseSpeakerName(cueText.trim());
+
+          // Track element for highlighting
+          currentTranscriptElements.push({
+            element: element,
+            start: currentCue.start,
+            end: currentCue.end,
+            text: cueText.trim()
+          });
+
+          // Add to timeline data
+          speakerTimelineData.push({
+            speaker: speaker,
+            start: currentCue.start,
+            end: currentCue.end,
+            text: cueText.trim()
+          });
+
+          totalDuration = Math.max(totalDuration, currentCue.end);
           cueText = '';
         }
         const [start, end] = line.split(' --> ');
         currentCue = { start: parseVTTTime(start), end: parseVTTTime(end) };
       } else if (line.trim() === '' && currentCue) {
         if (cueText) {
-          createCueElement(currentCue, cueText);
+          const element = createCueElement(currentCue, cueText.trim());
+          const speaker = parseSpeakerName(cueText.trim());
+
+          // Track element for highlighting
+          currentTranscriptElements.push({
+            element: element,
+            start: currentCue.start,
+            end: currentCue.end,
+            text: cueText.trim()
+          });
+
+          // Add to timeline data
+          speakerTimelineData.push({
+            speaker: speaker,
+            start: currentCue.start,
+            end: currentCue.end,
+            text: cueText.trim()
+          });
+
+          totalDuration = Math.max(totalDuration, currentCue.end);
           cueText = '';
           currentCue = null;
         }
@@ -162,7 +302,85 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
     if (currentCue && cueText) {
-      createCueElement(currentCue, cueText);
+      const element = createCueElement(currentCue, cueText.trim());
+      const speaker = parseSpeakerName(cueText.trim());
+
+      // Track element for highlighting
+      currentTranscriptElements.push({
+        element: element,
+        start: currentCue.start,
+        end: currentCue.end,
+        text: cueText.trim()
+      });
+
+      // Add to timeline data
+      speakerTimelineData.push({
+        speaker: speaker,
+        start: currentCue.start,
+        end: currentCue.end,
+        text: cueText.trim()
+      });
+
+      totalDuration = Math.max(totalDuration, currentCue.end);
+    }
+
+    // Create timeline if we have data
+    if (speakerTimelineData.length > 0 && totalDuration > 0) {
+      timelineSvg = null; // Reset
+      createSpeakerTimeline(speakerTimelineData, totalDuration);
+
+      // Add transcript highlighting functionality
+      let previousElementIndex = -1;
+      const highlightTranscript = () => {
+        const currentTime = videoPlayer.currentTime;
+        let currentElementIndex = -1;
+
+        // Find which transcript element corresponds to current time
+        for (let i = 0; i < currentTranscriptElements.length; i++) {
+          const element = currentTranscriptElements[i];
+          if (currentTime >= element.start && currentTime <= element.end) {
+            currentElementIndex = i;
+            break;
+          }
+        }
+
+        // Update highlighting with bounds checking
+        if (previousElementIndex !== -1 && previousElementIndex !== currentElementIndex && previousElementIndex < currentTranscriptElements.length) {
+          const prevElement = currentTranscriptElements[previousElementIndex];
+          if (prevElement && prevElement.element) {
+            prevElement.element.style.backgroundColor = '';
+            prevElement.element.style.color = '';
+          }
+        }
+
+        if (currentElementIndex !== -1 && currentElementIndex < currentTranscriptElements.length) {
+          const currentElement = currentTranscriptElements[currentElementIndex];
+          if (currentElement && currentElement.element) {
+            currentElement.element.style.backgroundColor = '#4285f4';
+            currentElement.element.style.color = 'white';
+
+            // Auto-scroll to keep current line in view
+            currentElement.element.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+          }
+        }
+
+        previousElementIndex = currentElementIndex;
+      };
+
+      // Clean up any existing transcript highlighting listeners
+      if (videoPlayer._transcriptHighlightListener) {
+        videoPlayer.removeEventListener('timeupdate', videoPlayer._transcriptHighlightListener);
+      }
+
+      // Set up highlighting
+      videoPlayer.addEventListener('timeupdate', highlightTranscript);
+      videoPlayer._transcriptHighlightListener = highlightTranscript;
+
+      // Console confirmation that transcript highlighting is set up
+      console.log(`🎯 Transcript highlighting ready: ${currentTranscriptElements.length} transcript lines`);
     }
   };
 

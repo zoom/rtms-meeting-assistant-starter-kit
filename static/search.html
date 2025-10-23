@@ -328,7 +328,7 @@
       <div class="section">
         <div class="heading">Playback Meeting Video</div>
         <div class="search-box">
-          <select id="meeting-uuid-select">
+          <select id="ak">
             <option value="">Select a Meeting...</option>
           </select>
         </div>
@@ -336,7 +336,15 @@
           <video id="video-player" controls>
             <track kind="subtitles" src="" srclang="en" id="vtt-track">
           </video>
-          <div>
+          <div style="flex: 1; min-width: 300px;">
+            <!-- Speaker Timeline -->
+            <div id="speaker-timeline-container" style="margin-bottom: 20px;">
+              <h4 style="margin: 0 0 10px 0; color: #333; font-size: 1.1em;">Speaker Timeline</h4>
+              <div id="speaker-timeline" style="height: 120px; background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; position: relative;">
+                <div style="position: absolute; top: 50%; left: 10px; transform: translateY(-50%); font-size: 12px; color: #666;">Timeline will appear here when transcript is loaded.</div>
+              </div>
+            </div>
+            <!-- Meeting Transcript -->
             <h4 style="margin: 10px 0 10px 0; color: #333; font-size: 1.1em;">Meeting Transcript</h4>
             <div class="transcript" id="transcript-text">Transcript will appear here when available.</div>
           </div>
