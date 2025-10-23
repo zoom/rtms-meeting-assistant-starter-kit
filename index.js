@@ -14,6 +14,7 @@ import { writeTranscriptToVtt } from './writeTranscriptToVtt.js';
 import { chatWithOpenRouter,chatWithOpenRouterFast } from './chatWithOpenrouter.js';
 import { convertMeetingMedia } from './convertMeetingMedia.js';
 import { muxFirstAudioVideo } from './muxFirstAudioVideo.js';
+import { handleShareData, generatePDFAndText } from './saveSharescreen.js';
 
 
 // Load environment variables from a .env file
@@ -106,16 +107,42 @@ app.post(WEBHOOK_PATH, async (req, res) => {
         const promptTemplate = fs.readFileSync('summary_prompt.md', 'utf-8');
         const eventsLog = fs.existsSync(`recordings/${safeMeetingUuid}/events.log`) ? fs.readFileSync(`recordings/${safeMeetingUuid}/events.log`, 'utf-8') : '';
         const transcriptVtt = fs.existsSync(`recordings/${safeMeetingUuid}/transcript.vtt`) ? fs.readFileSync(`recordings/${safeMeetingUuid}/transcript.vtt`, 'utf-8') : '';
+
+        // Read screen share images and convert to base64
+        const processedDir = path.join('recordings', safeMeetingUuid, 'processed', 'jpg');
+        let imageBase64Array = [];
+        if (fs.existsSync(processedDir)) {
+          const imageFiles = fs.readdirSync(processedDir).filter(file => file.endsWith('.jpg'));
+          console.log(`Found ${imageFiles.length} screen share images`);
+          for (const imageFile of imageFiles) {
+            try {
+              const imagePath = path.join(processedDir, imageFile);
+              const imageBuffer = fs.readFileSync(imagePath);
+              const base64Data = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
+              imageBase64Array.push(base64Data);
+            } catch (err) {
+              console.error(`Error reading image ${imageFile}:`, err.message);
+            }
+          }
+        } else {
+          console.log('No screen share images directory found');
+        }
+
         const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
         const filledPrompt = promptTemplate
           .replace(/\{\{raw_transcript\}\}/g, transcriptVtt)
           .replace(/\{\{meeting_events\}\}/g, eventsLog)
           .replace(/\{\{meeting_uuid\}\}/g, meeting_uuid)
           .replace(/\{\{TODAYDATE\}\}/g, todayDate);
-        const summary = await chatWithOpenRouter(filledPrompt);
+
+        const summary = await chatWithOpenRouter(filledPrompt, undefined, imageBase64Array);
         fs.mkdirSync('meeting_summary', { recursive: true });
         fs.writeFileSync(`meeting_summary/${safeMeetingUuid}.md`, summary);
         console.log(`✅ Summary generated and saved for meeting ${meeting_uuid} at meeting_summary/${safeMeetingUuid}.md`);
+
+        // Generate PDF from the unique screen share images
+        console.log('Generating PDF from screen share images for meeting: ' + meeting_uuid);
+        await generatePDFAndText(meeting_uuid);
       } catch (error) {
         console.error('❌ Error generating summary:', error.message);
       }
@@ -542,15 +569,12 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
         //console.log(`Processing video data for user ${user_name} (ID: ${user_id}), buffer size: ${buffer.length} bytes`);
         saveRawVideoAdvance(buffer, user_name, timestamp, meetingUuid); // Primary method
       }
-      //  Handle sharescreen data
-      // if (msg.msg_type === 16 && msg.content && msg.content.data) {
-      //   let epochMilliseconds = Date.now();
-      //   let { user_id, user_name, data: imgData, timestamp } = msg.content;
-      //   let buffer = Buffer.from(imgData, 'base64');
-      //   console.log(msg.content);
-      // }
-         if (msg.msg_type === 16) {
-        console.log('Sharescreen data received:', msg.content);
+      // Handle sharescreen data
+      if (msg.msg_type === 16 && msg.content && msg.content.data) {
+        let epochMilliseconds = Date.now();
+        let { user_id, user_name, data: imgData, timestamp } = msg.content;
+        // Call handleShareData to process and save unique screen share images
+        handleShareData(imgData, user_id, Date.now(), meetingUuid).catch(err => console.error('Error handling share data:', err));
       }
       // Handle transcript data
       if (msg.msg_type === 17 && msg.content && msg.content.data) {

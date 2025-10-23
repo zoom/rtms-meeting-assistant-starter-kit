@@ -15,14 +15,30 @@ const openai = new OpenAI({
  * @param {string} model - The model to use (e.g., 'anthropic/claude-3-haiku')
  * @returns {Promise<string>}
  */
-export async function chatWithOpenRouter(message, model = process.env.OPENROUTER_MODEL || 'openai/gpt-5-chat') {
+export async function chatWithOpenRouter(message, model = process.env.OPENROUTER_MODEL || 'openai/gpt-5-chat', images = []) {
 
 
   try {
     const enabled = process.env.OPENROUTER_REASONING_ENABLED === 'true' || false;
+
+    const content = [];
+
+    // Add text message
+    content.push({ type: 'text', text: message });
+
+    // Add images if provided
+    for (const imageBase64 of images) {
+      content.push({
+        type: 'image_url',
+        image_url: {
+          url: imageBase64 // Should be full data URI like "data:image/jpeg;base64,..."
+        }
+      });
+    }
+
     const response = await openai.chat.completions.create({
       model: model,
-      messages: [{ role: 'user', content: message }],
+      messages: [{ role: 'user', content: content }],
       ...(enabled ? { reasoning: { enabled: true } } : {})
     });
 
