@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import WebSocket from 'ws';
 import dotenv from 'dotenv';
+import helmet from 'helmet'
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
@@ -41,7 +42,35 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static files (HTML, JS, etc.)
-app.use(express.static(__dirname));
+app.use('/static', express.static(path.join(__dirname, 'static')));
+app.use('/recordings', express.static(path.join(__dirname, 'recordings')));
+
+// Configure Helmet for security
+// Note: Relaxed CSP for development/ngrok - tighten in production
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // unsafe-inline needed for Vite dev
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://openrouter.ai"],
+      mediaSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Needed for video playback
+}));
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  next();
+});
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Map to keep track of active WebSocket connections and audio chunks
 const activeConnections = new Map();
@@ -581,7 +610,98 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
   });
 }
 
-// GET /search - Serve the search page
+
+// API Endpoints for React frontend
+
+// GET /api/meetings - List all meetings
+app.get('/api/meetings', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || null;
+    const recordingsDir = 'recordings';
+    const summaryDir = 'meeting_summary';
+
+    if (!fs.existsSync(recordingsDir)) {
+      return res.json([]);
+    }
+
+    const meetings = [];
+    const uuids = fs.readdirSync(recordingsDir).filter(name => {
+      const fullPath = path.join(recordingsDir, name);
+      return fs.statSync(fullPath).isDirectory();
+    });
+
+    for (const uuid of uuids) {
+      const recordingPath = path.join(recordingsDir, uuid);
+      const stat = fs.statSync(recordingPath);
+
+      // Check if summary exists
+      const summaryPath = path.join(summaryDir, `${uuid}.md`);
+      const hasSummary = fs.existsSync(summaryPath);
+
+      // Try to read events.log for metadata
+      const eventsPath = path.join(recordingPath, 'events.log');
+      let title = uuid;
+      let duration = null;
+
+      if (fs.existsSync(eventsPath)) {
+        // Could parse events.log for participant names, etc.
+        // For now just use the UUID as title
+      }
+
+      meetings.push({
+        uuid,
+        title,
+        date: stat.mtime.toISOString(),
+        duration,
+        hasSummary,
+        hasVideo: fs.existsSync(path.join(recordingPath, 'final_output.mp4')),
+        hasTranscript: fs.existsSync(path.join(recordingPath, 'transcript.vtt'))
+      });
+    }
+
+    // Sort by date descending
+    meetings.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Apply limit if specified
+    const result = limit ? meetings.slice(0, limit) : meetings;
+    res.json(result);
+  } catch (error) {
+    console.error('Error listing meetings:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/meetings/:id - Get specific meeting metadata
+app.get('/api/meetings/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const safeId = sanitizeFileName(id);
+    const recordingPath = path.join('recordings', safeId);
+
+    if (!fs.existsSync(recordingPath)) {
+      return res.status(404).json({ error: 'Meeting not found' });
+    }
+
+    const stat = fs.statSync(recordingPath);
+    const summaryPath = path.join('meeting_summary', `${safeId}.md`);
+
+    const meeting = {
+      uuid: id,
+      title: id,
+      date: stat.mtime.toISOString(),
+      hasSummary: fs.existsSync(summaryPath),
+      hasVideo: fs.existsSync(path.join(recordingPath, 'final_output.mp4')),
+      hasTranscript: fs.existsSync(path.join(recordingPath, 'transcript.vtt'))
+    };
+
+    res.json(meeting);
+  } catch (error) {
+    console.error('Error getting meeting:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /search - Serve the search page (legacy)
 app.get('/search', (req, res) => {
   res.sendFile(path.join(__dirname, 'static', 'search.html'));
 });
@@ -675,6 +795,14 @@ app.get('/meeting-summary/:fileName', (req, res) => {
     console.error('Error reading summary file:', error.message);
     res.status(500).send('Internal server error');
   }
+});
+
+// Serve React SPA for all other routes (must be last)
+// This enables client-side routing to work properly
+app.use(express.static(path.join(__dirname, "client/dist")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "client/dist", "index.html"));
 });
 
 // Start the server and listen on the specified port
