@@ -701,6 +701,70 @@ app.get('/meeting-summary/:fileName', (req, res) => {
   }
 });
 
+// GET /meeting-pdf/:meetingUuid - Serve PDF file for a specific meeting
+app.get('/meeting-pdf/:meetingUuid', (req, res) => {
+  const meetingUuid = req.params.meetingUuid;
+  const safeMeetingUuid = sanitizeFileName(meetingUuid);
+  const pdfPath = path.join('recordings', safeMeetingUuid, 'processed', 'approved.pdf');
+
+  try {
+    if (fs.existsSync(pdfPath)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${safeMeetingUuid}_screenshare.pdf"`);
+      const fileStream = fs.createReadStream(pdfPath);
+      fileStream.pipe(res);
+    } else {
+      res.status(404).send('PDF not found for this meeting');
+    }
+  } catch (error) {
+    console.error('Error serving PDF:', error.message);
+    res.status(500).send('Error serving PDF');
+  }
+});
+
+// Utility function to extract topic from summary content
+function extractTopicFromSummary(content) {
+  const match = content.match(/<TOPIC>([^<]+)<\/TOPIC>/);
+  return match ? match[1].trim() : null;
+}
+
+// Utility function to extract meeting UUID from summary content
+function extractUuidFromSummary(content) {
+  const match = content.match(/<MEETING_UUID>([^<]+)<\/MEETING_UUID>/);
+  return match ? match[1].trim() : null;
+}
+
+// GET /meeting-topics - Return mapping of topics to UUIDs for all meetings
+app.get('/meeting-topics', (req, res) => {
+  try {
+    const meetingsDir = 'meeting_summary';
+    const topicMap = {};
+
+    if (fs.existsSync(meetingsDir)) {
+      const files = fs.readdirSync(meetingsDir).filter(file => file.endsWith('.md'));
+      files.forEach(file => {
+        try {
+          // Always use FILENAME-based UUID for mapping (not content UUID)
+          // This matches what frontend extracts from file.replace('.md', '')
+          const filenameUuid = file.replace('.md', '');
+          const content = fs.readFileSync(path.join(meetingsDir, file), 'utf-8');
+          const topic = extractTopicFromSummary(content);
+          if (topic && filenameUuid) {
+            topicMap[topic] = filenameUuid; // topic -> filename UUID (sanitized)
+          }
+        } catch (err) {
+          console.error(`Error reading ${file}:`, err.message);
+        }
+      });
+    }
+
+    res.json(topicMap); // Maps topic -> filename UUID (with __)
+  } catch (error) {
+    console.error('Error loading meeting topics:', error.message);
+    res.status(500).send('Error loading meeting topics');
+  }
+});
+
 // Start the server and listen on the specified port
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);

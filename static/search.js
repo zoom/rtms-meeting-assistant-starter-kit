@@ -1,4 +1,41 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // Tab switching functionality
+  const tabButtons = document.querySelectorAll('.tab-button');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      // Remove active class from all buttons and content
+      tabButtons.forEach(btn => btn.classList.remove('active'));
+      tabContents.forEach(content => content.classList.remove('active'));
+
+      // Add active class to clicked button and corresponding content
+      button.classList.add('active');
+      const tabId = button.getAttribute('data-tab');
+      document.getElementById(tabId).classList.add('active');
+    });
+  });
+
+  // Load topics on page load
+  const loadMeetingTopics = async () => {
+    try {
+      const response = await fetch('/meeting-topics');
+      if (response.ok) {
+        topicToUuidMap = await response.json();
+        console.log('Loaded topics:', topicToUuidMap);
+        return true;
+      } else {
+        console.error('Failed to load meeting topics');
+        topicToUuidMap = {};
+        return false;
+      }
+    } catch (error) {
+      console.error('Error loading meeting topics:', error);
+      topicToUuidMap = {};
+      return false;
+    }
+  };
+
   // Search functionality
   const form = document.querySelector('.section form');
   const queryInput = document.getElementById('query-input');
@@ -34,16 +71,19 @@ document.addEventListener('DOMContentLoaded', () => {
           foundUuids.push(match[1].trim());
         }
 
-        // Populate dropdown if UUIDs found
+        // Populate dropdown with topics if UUIDs found
         if (foundUuids.length > 0) {
           // Clear existing options except the first
           while (meetingUuidSelect.children.length > 1) {
             meetingUuidSelect.removeChild(meetingUuidSelect.lastChild);
           }
           foundUuids.forEach(uuid => {
+            // Find topic for this UUID
+            const topic = Object.keys(topicToUuidMap).find(t => topicToUuidMap[t] === uuid) || uuid;
+
             const option = document.createElement('option');
-            option.value = uuid;
-            option.textContent = uuid;
+            option.value = uuid; // Store UUID as value
+            option.textContent = topic; // Display topic text
             meetingUuidSelect.appendChild(option);
           });
           // Auto-load first meeting
@@ -65,6 +105,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoPlayer = document.getElementById('video-player');
   const transcriptDiv = document.getElementById('transcript-text');
   const vttTrack = document.getElementById('vtt-track');
+  const pdfButton = document.getElementById('pdf-button');
+  const pdfSection = document.getElementById('pdf-section');
+  const pdfIframe = document.getElementById('pdf-iframe');
+  const hidePdfBtn = document.getElementById('hide-pdf');
+
+  const summaryButton = document.getElementById('summary-button');
+  const summarySection = document.getElementById('summary-section');
+  const inlineSummaryContent = document.getElementById('inline-summary-content');
+  const hideSummaryBtn = document.getElementById('hide-summary');
+
+  // Global mapping of topics to UUIDs
+  let topicToUuidMap = {};
 
   // Function to parse VTT time string to seconds
   const parseVTTTime = (timeStr) => {
@@ -122,6 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const loadMeetingContent = async (uuid) => {
     if (!uuid) {
       transcriptDiv.textContent = 'Please select a Meeting UUID.';
+      pdfButton.style.display = 'none';
       return;
     }
 
@@ -145,12 +198,66 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.src = videoSrc;
       vttTrack.src = vttSrc;
 
+      // Show buttons
+      summaryButton.style.display = 'block';
+      pdfButton.style.display = 'block';
+
     } catch (error) {
       transcriptDiv.textContent = 'Error loading content: ' + error.message;
+      pdfButton.style.display = 'none';
     }
   };
 
+  // PDF Viewer functionality
+  pdfButton.addEventListener('click', () => {
+    if (meetingUuidSelect.value) {
+      const uuid = meetingUuidSelect.value;
+      pdfIframe.src = `/meeting-pdf/${uuid}`;
+      pdfSection.style.display = 'block';
+    }
+  });
 
+  hidePdfBtn.addEventListener('click', () => {
+    pdfSection.style.display = 'none';
+    pdfIframe.src = '';
+  });
+
+  // Summary Viewer functionality
+  summaryButton.addEventListener('click', () => {
+    if (meetingUuidSelect.value) {
+      loadInlineSummaryContent();
+    }
+  });
+
+  hideSummaryBtn.addEventListener('click', () => {
+    summarySection.style.display = 'none';
+    inlineSummaryContent.innerHTML = '';
+  });
+
+  // Function to load summary for the currently selected meeting
+  const loadInlineSummaryContent = async () => {
+    if (!meetingUuidSelect.value) {
+      return;
+    }
+
+    const safeUuid = meetingUuidSelect.value.replace(/[<>:"\/\\|?*=\s]/g, '_');
+    const fileName = `${safeUuid}.md`;
+
+    try {
+      const response = await fetch(`/meeting-summary/${fileName}`);
+      if (response.ok) {
+        const content = await response.text();
+        inlineSummaryContent.innerHTML = markdownToHtml(content);
+        summarySection.style.display = 'block';
+      } else {
+        inlineSummaryContent.innerHTML = 'Summary not available for this meeting.';
+        summarySection.style.display = 'block';
+      }
+    } catch (error) {
+      inlineSummaryContent.innerHTML = 'Error loading summary: ' + error.message;
+      summarySection.style.display = 'block';
+    }
+  };
 
   // Handle dropdown change
   meetingUuidSelect.addEventListener('change', async () => {
@@ -164,15 +271,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Function to load summary files
   const loadSummaryFiles = async () => {
+    // Wait for topics to load first
+    if (Object.keys(topicToUuidMap).length === 0) {
+      await new Promise(resolve => setTimeout(resolve, 100)); // Wait a bit for topics to load
+    }
+
     try {
       const response = await fetch('/meeting-summary-files');
       if (response.ok) {
         const files = await response.json();
         summarySelect.innerHTML = '<option value="">Select a meeting summary...</option>';
+        console.log('Processing summary files, topic map:', topicToUuidMap);
         files.forEach(file => {
+          // Remove .md extension and find topic
+          const uuid = file.replace('.md', '');
+          console.log(`Processing file: ${file}, extracted UUID: ${uuid}`);
+          const topic = Object.keys(topicToUuidMap).find(t => topicToUuidMap[t] === uuid) || file;
+          console.log(`Found topic for UUID ${uuid}: ${topic}`);
+
           const option = document.createElement('option');
-          option.value = file;
-          option.textContent = file;
+          option.value = uuid; // Use UUID as value for consistency
+          option.textContent = topic; // Display topic
           summarySelect.appendChild(option);
         });
       } else {
@@ -205,13 +324,15 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Function to load summary content
-  const loadSummaryContent = async (fileName) => {
-    if (!fileName) {
+  const loadSummaryContent = async (uuid) => {
+    if (!uuid) {
       summaryResults.innerHTML = '';
       return;
     }
+    // Convert UUID to filename format
+    const safeFileName = uuid.replace(/[<>:"\/\\|?*=\s]/g, '_') + '.md';
     try {
-      const response = await fetch(`/meeting-summary/${fileName}`);
+      const response = await fetch(`/meeting-summary/${safeFileName}`);
       if (response.ok) {
         const content = await response.text();
         summaryResults.innerHTML = markdownToHtml(content);
@@ -229,6 +350,25 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSummaryContent(selectedFile);
   });
 
-  // Load summary files on page load
-  loadSummaryFiles();
+  // Initialize the application - load topics first, then enable functionality
+  const initializeApp = async () => {
+    console.log('Initializing application...');
+
+    // Load topics first (required for search functionality)
+    const topicsLoaded = await loadMeetingTopics();
+    if (topicsLoaded) {
+      console.log('Topics loaded successfully - enabling search functionality');
+      // Enable search form (it's already enabled, but now topics are available)
+
+      // Now load summary files
+      loadSummaryFiles();
+    } else {
+      console.error('Failed to load topics - search functionality may be limited');
+      // Still allow basic functionality even if topics fail
+      loadSummaryFiles();
+    }
+  };
+
+  // Initialize the application
+  initializeApp();
 });

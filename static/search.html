@@ -15,6 +15,44 @@
       min-height: 100vh;
       background-color: #f5f5f5;
     }
+
+    /* Tab styling */
+    .tab-bar {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .tab-button {
+      padding: 12px 24px;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 500;
+      color: #666;
+      transition: all 0.3s ease;
+    }
+
+    .tab-button:hover {
+      color: #4285f4;
+      background-color: #f0f0f0;
+    }
+
+    .tab-button.active {
+      color: #4285f4;
+      border-bottom-color: #4285f4;
+      background-color: #f8f9ff;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
     .container {
       max-width: 800px;
       width: 100%;
@@ -150,46 +188,97 @@
     .transcript-line:hover {
       background-color: #f0f0f0;
     }
+
+
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="section">
-      <div class="heading">Query Meeting Summaries</div>
-      <form>
+    <!-- Tab Navigation -->
+    <div class="tab-bar">
+      <button class="tab-button active" data-tab="search-playback">Search and Playback</button>
+      <button class="tab-button" data-tab="summaries">View All Summaries</button>
+      <button class="tab-button" data-tab="realtime">Real-time</button>
+    </div>
+
+    <!-- Tab Content -->
+    <div id="search-playback" class="tab-content active">
+      <div class="section">
+        <div class="heading">Query Meeting Summaries</div>
+        <form>
+          <div class="search-box">
+            <input type="text" id="query-input" placeholder="Ask questions about your meeting summaries..." required>
+            <button type="submit">Search</button>
+          </div>
+        </form>
+        <div class="results" id="results"></div>
+      </div>
+
+      <div class="section">
+        <div class="heading">Playback Meeting Video</div>
         <div class="search-box">
-          <input type="text" id="query-input" placeholder="Ask questions about your meeting summaries..." required>
-          <button type="submit">Search</button>
+          <select id="meeting-uuid-select">
+            <option value="">Select a Meeting...</option>
+          </select>
         </div>
-      </form>
-      <div class="results" id="results"></div>
+        <div class="video-container">
+          <video id="video-player" controls>
+            <track kind="subtitles" src="" srclang="en" id="vtt-track">
+          </video>
+          <div>
+            <h4 style="margin: 10px 0 10px 0; color: #333; font-size: 1.1em;">Meeting Transcript</h4>
+            <div class="transcript" id="transcript-text">Transcript will appear here when available.</div>
+          </div>
+        </div>
+
+        <!-- Summary Viewer Section -->
+        <div id="summary-section" style="display: none; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h4 style="margin: 0; color: #333;">Meeting Summary</h4>
+            <button id="hide-summary" style="padding: 5px 10px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">Hide Summary</button>
+          </div>
+          <div id="inline-summary-content" class="results" style="margin-top: 0;"></div>
+        </div>
+
+        <!-- PDF Viewer Section -->
+        <div id="pdf-section" style="display: none; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h4 style="margin: 0; color: #333;">Screen Share PDF</h4>
+            <button id="hide-pdf" style="padding: 5px 10px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">Hide PDF</button>
+          </div>
+          <iframe id="pdf-iframe" style="width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 4px;"></iframe>
+        </div>
+
+        <div style="margin: 20px 0 10px 0; text-align: center; display: flex; gap: 10px; justify-content: center;">
+          <button id="summary-button" style="display: none; padding: 12px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">📝 Show Meeting Summary</button>
+          <button id="pdf-button" style="display: none; padding: 12px 20px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">📄 Show Screen Share PDF</button>
+        </div>
+      </div>
     </div>
 
-    <div class="section">
-      <div class="heading">Playback Meeting Video</div>
-      <div class="search-box">
-        <select id="meeting-uuid-select">
-          <option value="">Select a Meeting UUID...</option>
-        </select>
-      </div>
-      <div class="video-container">
-        <video id="video-player" controls>
-          <track kind="subtitles" src="" srclang="en" id="vtt-track">
-        </video>
-        <div class="transcript" id="transcript-text">Transcript will appear here when available.</div>
+    <div id="summaries" class="tab-content">
+      <div class="section">
+        <div class="heading">View Meeting Summary</div>
+        <div class="search-box">
+          <select id="summary-select">
+            <option value="">Select a meeting summary...</option>
+          </select>
+        </div>
+        <div class="results" id="summary-results"></div>
       </div>
     </div>
 
-    <div class="section">
-      <div class="heading">View Meeting Summary</div>
-      <div class="search-box">
-        <select id="summary-select">
-          <option value="">Select a meeting summary...</option>
-        </select>
+    <div id="realtime" class="tab-content">
+      <div class="section">
+        <div class="heading">Real-time Monitoring</div>
+        <div class="results">
+          <p>Real-time monitoring features will be available here.</p>
+        </div>
       </div>
-      <div class="results" id="summary-results"></div>
     </div>
   </div>
+
+
 
   <script src="static/search.js"></script>
 </body>
