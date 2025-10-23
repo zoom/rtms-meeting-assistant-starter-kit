@@ -170,3 +170,112 @@ ${combinedContext}
     console.error(`❌ Error during synthesis:`, err.response?.data || err.message);
   }
 }
+
+/**
+ * Generate strategic dialog suggestions for meeting facilitation
+ * @param {string} transcript - Full meeting transcript text
+ * @returns {Promise<string[]>} Array of 4 RPG-style dialog suggestions
+ */
+export async function generateDialogSuggestions(transcript) {
+  try {
+    // Read and populate the dialog suggestions prompt
+    const dialogPromptTemplate = await import('fs').then(fs => fs.readFileSync('query_prompt_dialog_suggestions.md', 'utf-8'));
+    const filledPrompt = dialogPromptTemplate.replace(/\{\{meeting_transcript\}\}/g, transcript);
+
+    console.log('🗣️ Generating dialog suggestions from transcript...');
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENROUTER_MODEL || 'openai/gpt-5-chat',
+      messages: [{ role: 'user', content: filledPrompt }],
+    });
+
+    // Parse the response into an array of strings (split by newlines, filter empty)
+    const suggestions = response.choices[0].message.content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && !line.startsWith('Response:') && !line.startsWith('Only return'));
+
+    console.log(`✅ Generated ${suggestions.length} dialog suggestions`);
+    return suggestions.slice(0, 4); // Ensure max 4 suggestions
+  } catch (err) {
+    console.error('❌ Error generating dialog suggestions:', err.message);
+    return [
+      "Continue exploring the key points raised so far",
+      "Invite participants to share their perspectives",
+      "Summarize the discussion and identify next priorities",
+      "Seek consensus on the primary objectives"
+    ]; // Fallback suggestions
+  }
+}
+
+/**
+ * Analyze sentiment from full meeting transcript for multiple users
+ * @param {string} transcript - Full meeting transcript text
+ * @returns {Promise<Object>} Object with user keys and {positive, neutral, negative} values
+ */
+export async function analyzeSentiment(transcript) {
+  try {
+    // Read and populate the sentiment analysis prompt
+    const sentimentPromptTemplate = await import('fs').then(fs => fs.readFileSync('query_prompt_sentiment_analysis.md', 'utf-8'));
+    const filledPrompt = sentimentPromptTemplate.replace(/\{\{meeting_transcript\}\}/g, transcript);
+
+    console.log('😊 Analyzing sentiment from full transcript...');
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENROUTER_MODEL || 'openai/gpt-5-chat',
+      messages: [{ role: 'user', content: filledPrompt }],
+    });
+
+    // Parse the JSON response
+    const rawContent = response.choices[0].message.content.trim();
+
+    // Extract JSON from response (remove any markdown formatting if present)
+    let jsonContent = rawContent;
+    if (rawContent.startsWith('```json')) {
+      jsonContent = rawContent.replace(/```json\s*/, '').replace(/\s*```$/, '');
+    } else if (rawContent.startsWith('```')) {
+      jsonContent = rawContent.replace(/```\s*/, '').replace(/\s*```$/, '');
+    }
+
+    try {
+      const sentimentData = JSON.parse(jsonContent);
+      console.log('✅ Sentiment analysis completed:', Object.keys(sentimentData).length, 'users analyzed');
+      return sentimentData;
+    } catch (parseError) {
+      console.error('❌ Error parsing sentiment JSON response:', parseError.message);
+      console.error('Raw response:', rawContent);
+      // Return empty object as fallback
+      return {};
+    }
+  } catch (err) {
+    console.error('❌ Error analyzing sentiment:', err.message);
+    return {}; // Empty object as fallback
+  }
+}
+
+/**
+ * Query the current meeting transcript for specific questions
+ * @param {string} transcript - Full current meeting transcript
+ * @param {string} userQuery - User's question about the meeting
+ * @returns {Promise<string>} Contextual answer based on transcript
+ */
+export async function queryCurrentMeeting(transcript, userQuery) {
+  try {
+    // Read and populate the current meeting query prompt
+    const queryPromptTemplate = await import('fs').then(fs => fs.readFileSync('query_prompt_current_meeting.md', 'utf-8'));
+    const filledPrompt = queryPromptTemplate
+      .replace(/\{\{meeting_transcript\}\}/g, transcript)
+      .replace(/\{\{user_query\}\}/g, userQuery);
+
+    console.log('🔍 Querying current meeting transcript...');
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENROUTER_MODEL || 'openai/gpt-5-chat',
+      messages: [{ role: 'user', content: filledPrompt }],
+    });
+
+    const answer = response.choices[0].message.content;
+    console.log('✅ Meeting query answered');
+    return answer;
+  } catch (err) {
+    console.error('❌ Error querying current meeting:', err.message);
+    return 'I apologize, but I was unable to analyze the current meeting transcript. Please try again later.';
+  }
+}

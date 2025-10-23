@@ -350,6 +350,343 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSummaryContent(selectedFile);
   });
 
+  // Real-time dashboard variables
+  let realTimeWebSocket = null;
+  let sentimentChart = null;
+  let currentSentimentData = {};
+
+  // Initialize D3.js sentiment chart
+  const initializeSentimentChart = () => {
+    const container = d3.select('#rt-sentiment-chart');
+    container.html(''); // Clear previous chart
+
+    const margin = { top: 20, right: 20, bottom: 50, left: 60 };
+    const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+    const height = 200 - margin.top - margin.bottom;
+
+    const svg = container
+      .append('svg')
+      .attr('width', width + margin.left + margin.right)
+      .attr('height', height + margin.top + margin.bottom)
+      .append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    sentimentChart = { svg, width, height, container };
+  };
+
+  // Update sentiment chart with new data - always redraw everything
+  const updateSentimentChart = (sentimentData) => {
+    if (Object.keys(sentimentData).length === 0) {
+      console.log('No sentiment data to display');
+      return;
+    }
+
+    // Always reinitialize to ensure clean redraw
+    initializeSentimentChart();
+
+    if (!sentimentChart) {
+      console.log('Chart not initialized');
+      return;
+    }
+
+    console.log('Updating sentiment chart with:', sentimentData);
+
+    const { svg, width, height } = sentimentChart;
+
+    // Prepare data for stacked bar chart
+    const users = Object.keys(sentimentData);
+    const colors = ['#dc3545', '#ffc107', '#28a745']; // negative, neutral, positive
+
+    // Calculate totals and prepare stacked data
+    const stackedData = users.map(user => {
+      const data = sentimentData[user];
+      return {
+        user,
+        negative: data.negative || 0,
+        neutral: data.neutral || 0,
+        positive: data.positive || 0,
+        total: (data.negative || 0) + (data.neutral || 0) + (data.positive || 0)
+      };
+    });
+
+    console.log('Processed stacked data:', stackedData);
+
+    // Add some padding for better visualization if no data
+    const maxTotal = d3.max(stackedData, d => d.total) || 10;
+    const yDomainMax = Math.max(maxTotal * 1.1, 10); // At least 10 for scale
+
+    // Scales
+    const xScale = d3.scaleBand()
+      .domain(stackedData.map(d => d.user))
+      .range([0, width])
+      .padding(0.2); // More padding for better spacing
+
+    const yScale = d3.scaleLinear()
+      .domain([0, yDomainMax])
+      .range([height, 0]);
+
+    // Create stacked bars
+    const stack = d3.stack()
+      .keys(['negative', 'neutral', 'positive']);
+
+    const series = stack(stackedData);
+    console.log('Stacked series:', series);
+
+    // Create layers for each sentiment type
+    series.forEach((layer, i) => {
+      svg.selectAll(`.bar-negative-${i}`)
+        .data(layer)
+        .enter().append('rect')
+        .attr('class', `bar-negative-${i}`)
+        .attr('x', d => xScale(d.data.user))
+        .attr('y', d => yScale(d[1]))
+        .attr('height', d => Math.max(0, yScale(d[0]) - yScale(d[1])))
+        .attr('width', xScale.bandwidth())
+        .attr('fill', colors[i])
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 1);
+    });
+
+    // Add axes
+    svg.append('g')
+      .attr('transform', `translate(0,${height})`)
+      .call(d3.axisBottom(xScale))
+      .selectAll('text')
+      .attr('transform', 'rotate(-45)')
+      .style('text-anchor', 'end')
+      .style('font-size', '10px');
+
+    svg.append('g')
+      .call(d3.axisLeft(yScale))
+      .selectAll('text')
+      .style('font-size', '10px');
+
+    // Add legend
+    const legend = svg.append('g')
+      .attr('transform', `translate(${width - 80}, 10)`);
+
+    const legendData = [
+      { label: 'Negative', color: colors[0] },
+      { label: 'Neutral', color: colors[1] },
+      { label: 'Positive', color: colors[2] }
+    ];
+
+    legendData.forEach((d, i) => {
+      const legendRow = legend.append('g')
+        .attr('transform', `translate(0, ${i * 15})`);
+
+      legendRow.append('rect')
+        .attr('width', 10)
+        .attr('height', 10)
+        .attr('fill', d.color);
+
+      legendRow.append('text')
+        .attr('x', 15)
+        .attr('y', 9)
+        .style('font-size', '10px')
+        .style('text-anchor', 'start')
+        .text(d.label);
+    });
+
+    console.log('Sentiment chart updated successfully');
+  };
+
+  // WebSocket connection for real-time dashboard
+  const connectRealTimeWebSocket = async (meetingUuid) => {
+    try {
+      // Load WebSocket configuration
+      const configResponse = await fetch('/api/config');
+      if (!configResponse.ok) {
+        throw new Error('Failed to load WebSocket configuration');
+      }
+
+      const config = await configResponse.json();
+      const websocketUrl = `${config.websocketUrl}?meeting=${encodeURIComponent(meetingUuid || 'global')}`;
+
+      console.log('Connecting to real-time WebSocket:', websocketUrl);
+
+      // Update connection status
+      const statusEl = document.getElementById('rt-connection-status');
+      statusEl.textContent = '🟡 Connecting...';
+      statusEl.className = 'status-connecting';
+
+      realTimeWebSocket = new WebSocket(websocketUrl);
+      let keepAliveInterval = null;
+
+      realTimeWebSocket.onopen = () => {
+        console.log('Real-time WebSocket connected');
+        statusEl.textContent = '🟢 Connected - Active';
+        statusEl.className = 'status-connected';
+
+        // Initialize sentiment chart when connected
+        initializeSentimentChart();
+
+        // Client-side keep-alive: Send periodic heartbeat messages
+        // This helps detect if connection is still alive and responsive
+        keepAliveInterval = setInterval(() => {
+          if (realTimeWebSocket.readyState === WebSocket.OPEN) {
+            // Send a heartbeat message that server can ignore if it wants
+            realTimeWebSocket.send(JSON.stringify({ type: 'heartbeat', timestamp: Date.now() }));
+          }
+        }, 25000); // Every 25 seconds (slightly less than server ping interval)
+      };
+
+      realTimeWebSocket.onmessage = (event) => {
+        try {
+          // Update connection status to show we've received data
+          if (statusEl.className === 'status-connected') {
+            statusEl.textContent = '🟢 Connected - Active';
+          }
+
+          const data = JSON.parse(event.data);
+          handleWebSocketMessage(data);
+        } catch (err) {
+          console.error('Error parsing WebSocket message:', err);
+        }
+      };
+
+      realTimeWebSocket.onclose = (event) => {
+        console.log('Real-time WebSocket disconnected, code:', event.code, 'reason:', event.reason);
+        if (keepAliveInterval) {
+          clearInterval(keepAliveInterval);
+          keepAliveInterval = null;
+        }
+        const statusEl = document.getElementById('rt-connection-status');
+        statusEl.textContent = '🔴 Disconnected';
+        statusEl.className = 'status-disconnected';
+      };
+
+      realTimeWebSocket.onerror = (error) => {
+        console.error('Real-time WebSocket error:', error);
+        if (keepAliveInterval) {
+          clearInterval(keepAliveInterval);
+          keepAliveInterval = null;
+        }
+        const statusEl = document.getElementById('rt-connection-status');
+        statusEl.textContent = '🔴 Connection Error';
+        statusEl.className = 'status-disconnected';
+      };
+
+      // Add manual reconnection capability
+      realTimeWebSocket.addEventListener('close', () => {
+        // Auto-reconnect after 5 seconds
+        setTimeout(() => {
+          if (statusEl.className === 'status-disconnected') {
+            console.log('Attempting to reconnect...');
+            statusEl.textContent = '🔄 Reconnecting...';
+            connectRealTimeWebSocket(meetingUuid);
+          }
+        }, 5000);
+      });
+
+    } catch (error) {
+      console.error('Failed to connect to real-time WebSocket:', error);
+      const statusEl = document.getElementById('rt-connection-status');
+      statusEl.textContent = '🔴 Failed to Connect';
+      statusEl.className = 'status-disconnected';
+    }
+  };
+
+  // Handle WebSocket messages
+  const handleWebSocketMessage = (data) => {
+    console.log('Received WebSocket message:', data);
+
+    switch (data.type) {
+      case 'connected':
+        console.log('WebSocket connection confirmed');
+        break;
+
+      case 'transcript':
+        // Update live transcript
+        const transcriptDiv = document.getElementById('rt-transcript');
+        // Handle timestamp properly - could be epoch seconds or milliseconds
+        let timestamp;
+        try {
+          if (data.timestamp > 1e12) { // Likely milliseconds
+            timestamp = new Date(data.timestamp).toLocaleTimeString();
+          } else { // Likely seconds
+            timestamp = new Date(data.timestamp * 1000).toLocaleTimeString();
+          }
+        } catch (e) {
+          timestamp = 'Unknown Time';
+        }
+        const user = data.user ? `${data.user}: ` : '';
+        const newLine = `[${timestamp}] ${user}${data.text}\n`;
+        transcriptDiv.innerHTML += newLine;
+        transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+        break;
+
+      case 'sentiment':
+        // Update sentiment chart and info
+        currentSentimentData = data.analysis || {};
+        updateSentimentChart(currentSentimentData);
+
+        // Update info section
+        const infoDiv = document.getElementById('rt-sentiment-info');
+        const userCount = Object.keys(currentSentimentData).length;
+        const totalSentiment = Object.values(currentSentimentData).reduce((sum, user) =>
+          sum + (user.positive || 0) + (user.neutral || 0) + (user.negative || 0), 0);
+        infoDiv.textContent = `${userCount} users • ${totalSentiment} total sentiment instances`;
+        break;
+
+      case 'ai_dialog':
+        // Update dialog suggestions
+        const dialogDiv = document.getElementById('rt-dialog-suggestions');
+        if (data.suggestions && data.suggestions.length > 0) {
+          dialogDiv.innerHTML = data.suggestions.map((suggestion, index) =>
+            `<div style="margin-bottom: 10px;">
+              <strong>${index + 1}.</strong> ${suggestion}
+            </div>`
+          ).join('');
+        } else {
+          dialogDiv.innerHTML = '<p>No suggestions available at this time.</p>';
+        }
+        break;
+
+      default:
+        console.log('Unknown WebSocket message type:', data.type);
+    }
+  };
+
+  // Real-time query functionality
+  document.getElementById('rt-query-button')?.addEventListener('click', async () => {
+    const queryInput = document.getElementById('rt-query-input');
+    const resultsDiv = document.getElementById('rt-query-results');
+
+    if (!queryInput || !resultsDiv) return;
+
+    const query = queryInput.value.trim();
+    if (!query) {
+      resultsDiv.innerHTML = 'Please enter a question about the meeting.';
+      return;
+    }
+
+    resultsDiv.innerHTML = 'Asking AI...';
+
+    try {
+      const response = await fetch('/api/meeting-query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          meetingUuid: new URLSearchParams(window.location.search).get('meeting') || 'global'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        resultsDiv.innerHTML = data.answer;
+      } else {
+        resultsDiv.innerHTML = 'Failed to get response from AI.';
+      }
+    } catch (error) {
+      console.error('Query error:', error);
+      resultsDiv.innerHTML = 'Error connecting to AI service.';
+    }
+  });
+
   // Initialize the application - load topics first, then enable functionality
   const initializeApp = async () => {
     console.log('Initializing application...');
@@ -362,10 +699,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Now load summary files
       loadSummaryFiles();
+
+      // Try to connect to real-time WebSocket with current meeting UUID or global
+      const urlParams = new URLSearchParams(window.location.search);
+      const meetingUuid = urlParams.get('meeting') || 'global';
+      connectRealTimeWebSocket(meetingUuid);
+
     } else {
       console.error('Failed to load topics - search functionality may be limited');
       // Still allow basic functionality even if topics fail
       loadSummaryFiles();
+      connectRealTimeWebSocket('global');
     }
   };
 

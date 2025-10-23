@@ -1,6 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
-import WebSocket from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 import { saveRawAudio as saveRawAudioAdvance } from './saveRawAudioAdvance.js';
 import { saveRawVideo as saveRawVideoAdvance } from './saveRawVideoAdvance.js';
 import { writeTranscriptToVtt } from './writeTranscriptToVtt.js';
-import { chatWithOpenRouter,chatWithOpenRouterFast } from './chatWithOpenrouter.js';
+import { chatWithOpenRouter,chatWithOpenRouterFast, generateDialogSuggestions, analyzeSentiment, queryCurrentMeeting } from './chatWithOpenrouter.js';
 import { convertMeetingMedia } from './convertMeetingMedia.js';
 import { muxFirstAudioVideo } from './muxFirstAudioVideo.js';
 import { handleShareData, generatePDFAndText } from './saveSharescreen.js';
@@ -46,6 +46,12 @@ app.use(express.static(__dirname));
 
 // Map to keep track of active WebSocket connections and audio chunks
 const activeConnections = new Map();
+
+// WebSocket connection store for clients (meetingUuid -> [clientWs1, clientWs2, ...])
+const clientWebSocketConnections = new Map();
+
+// AI Results cache per meeting (meetingUuid -> {dialog, sentiment, lastUpdated})
+const aiCache = new Map();
 
 
 // Handle POST requests to the webhook endpoint
@@ -580,7 +586,20 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
       if (msg.msg_type === 17 && msg.content && msg.content.data) {
         let { user_id, user_name, data, timestamp } = msg.content;
         console.log(`Processing transcript: "${data}" from user ${user_name} (ID: ${user_id})`);
+
+        // Write transcript to VTT file
         writeTranscriptToVtt(user_name, timestamp / 1000, data, safeMeetingUuid);
+
+        // Broadcast transcript to WebSocket clients immediately
+        broadcastToWebSocketClients({
+          type: 'transcript',
+          user: user_name,
+          text: data,
+          timestamp: timestamp
+        }, meetingUuid);
+
+        // Schedule AI processing (cached, 15-second intervals)
+        scheduleAIProcessing(meetingUuid, safeMeetingUuid);
       }
 
       // Handle chat data
@@ -608,6 +627,39 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
 // GET /search - Serve the search page
 app.get('/search', (req, res) => {
   res.sendFile(path.join(__dirname, 'static', 'search.html'));
+});
+
+// GET /api/config - Return configuration for client
+app.get('/api/config', (req, res) => {
+  res.json({
+    websocketUrl: process.env.WEBSOCKET_URL || 'rtms.asdc.cc/client-websocket'
+  });
+});
+
+// POST /api/meeting-query - Handle queries about current meeting
+app.post('/api/meeting-query', async (req, res) => {
+  try {
+    const { meetingUuid, query } = req.body;
+
+    if (!meetingUuid || !query) {
+      return res.status(400).json({ error: 'Meeting UUID and query are required' });
+    }
+
+    const safeMeetingUuid = sanitizeFileName(meetingUuid);
+    const vttPath = `recordings/${safeMeetingUuid}/transcript.vtt`;
+
+    if (!fs.existsSync(vttPath)) {
+      return res.status(404).json({ error: 'Meeting transcript not found' });
+    }
+
+    const transcript = fs.readFileSync(vttPath, 'utf-8');
+    const answer = await queryCurrentMeeting(transcript, query);
+
+    res.json({ answer });
+  } catch (error) {
+    console.error('Meeting query error:', error);
+    res.status(500).json({ error: 'Failed to process meeting query' });
+  }
 });
 
 
@@ -765,8 +817,187 @@ app.get('/meeting-topics', (req, res) => {
   }
 });
 
+// WebSocket broadcasting function for real-time updates
+function broadcastToWebSocketClients(message, meetingUuid = null) {
+  // Send message to all connected client WebSockets
+  // For now, we'll implement this when we add the client WebSocket server
+  console.log('Broadcasting message:', message);
+
+  // If meetingUuid specified, only broadcast to clients connected to that meeting
+  if (meetingUuid && clientWebSocketConnections.has(meetingUuid)) {
+    const clients = clientWebSocketConnections.get(meetingUuid);
+    clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(JSON.stringify(message));
+        } catch (err) {
+          console.error('Error sending to client:', err);
+        }
+      }
+    });
+  } else {
+    // Broadcast to all clients (global broadcast)
+    clientWebSocketConnections.forEach((clients, uuid) => {
+      clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          try {
+            client.send(JSON.stringify(message));
+          } catch (err) {
+            console.error('Error sending to client:', err);
+          }
+        }
+      });
+    });
+  }
+}
+
+// AI Processing scheduler with caching (15-second intervals)
+function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
+  const now = Date.now();
+  const cacheKey = meetingUuid;
+  const cache = aiCache.get(cacheKey) || {};
+
+  // Only process if 15+ seconds since last update
+  if (!cache.lastUpdated || (now - cache.lastUpdated) > 15000) {
+    console.log('🧠 Starting AI processing for meeting:', meetingUuid);
+
+    // Read full VTT transcript for AI context
+    const vttPath = `recordings/${safeMeetingUuid}/transcript.vtt`;
+    if (!fs.existsSync(vttPath)) {
+      console.log('VTT transcript not found, skipping AI processing');
+      return;
+    }
+
+    const currentVTT = fs.readFileSync(vttPath, 'utf-8');
+
+    // Process AI in non-blocking way
+    Promise.all([
+      generateDialogSuggestions(currentVTT),
+      analyzeSentiment(currentVTT)
+    ]).then(([dialogSuggestions, sentimentAnalysis]) => {
+      // Update cache
+      cache.dialog = dialogSuggestions;
+      cache.sentiment = sentimentAnalysis;
+      cache.lastUpdated = now;
+      aiCache.set(cacheKey, cache);
+
+      console.log('✅ AI processing complete, broadcasting results');
+
+      // Broadcast AI results to clients
+      broadcastToWebSocketClients({
+        type: 'ai_dialog',
+        suggestions: dialogSuggestions
+      }, meetingUuid);
+
+      broadcastToWebSocketClients({
+        type: 'sentiment',
+        analysis: sentimentAnalysis
+      }, meetingUuid);
+
+    }).catch(err => {
+      console.error('❌ AI processing error:', err);
+    });
+  } else {
+    console.log('⏳ AI cache still fresh, skipping processing');
+  }
+}
+
 // Start the server and listen on the specified port
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
   console.log(`Webhook endpoint available at http://localhost:${port}${WEBHOOK_PATH}`);
+});
+
+// Initialize WebSocket server for client connections
+const wss = new WebSocketServer({
+  server,
+  perMessageDeflate: false
+});
+
+wss.on('connection', (ws, request) => {
+  console.log('🖥️ Client connected to WebSocket server');
+
+  // Extract meeting UUID from query parameters (e.g., ?meeting=uuid123)
+  const url = new URL(request.url, `ws://localhost:${port}`);
+  const meetingUuid = url.searchParams.get('meeting');
+
+  console.log(`Client joined meeting: ${meetingUuid || 'global'}`);
+
+  // Store connection by meeting UUID
+  if (meetingUuid) {
+    if (!clientWebSocketConnections.has(meetingUuid)) {
+      clientWebSocketConnections.set(meetingUuid, []);
+    }
+    clientWebSocketConnections.get(meetingUuid).push(ws);
+  }
+
+  // Set up keep-alive ping/pong
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.ping();
+    }
+  }, 30000); // Ping every 30 seconds
+
+  ws.on('pong', () => {
+    // Client responded to ping - connection is healthy
+    console.log('🔄 Pong received from client');
+  });
+
+  ws.on('message', (data) => {
+    try {
+      const message = JSON.parse(data.toString());
+      console.log('📨 Received client message:', message);
+      // Handle client messages if needed (currently just broadcasting)
+    } catch (err) {
+      console.error('❌ Error parsing client message:', err);
+    }
+  });
+
+  ws.on('close', (code, reason) => {
+    console.log(`📴 Client disconnected: ${code} ${reason}`);
+
+    // Remove from connection store
+    if (meetingUuid) {
+      const clients = clientWebSocketConnections.get(meetingUuid) || [];
+      const index = clients.indexOf(ws);
+      if (index > -1) {
+        clients.splice(index, 1);
+        if (clients.length === 0) {
+          clientWebSocketConnections.delete(meetingUuid);
+        }
+      }
+    }
+
+    clearInterval(pingInterval);
+  });
+
+  ws.on('error', (err) => {
+    console.error('❌ WebSocket client error:', err);
+  });
+
+  // Send welcome message
+  ws.send(JSON.stringify({
+    type: 'connected',
+    message: 'Connected to RTMS meeting intelligence server',
+    meeting: meetingUuid || 'global'
+  }));
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  wss.close(() => {
+    server.close(() => {
+      process.exit(0);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  wss.close(() => {
+    server.close(() => {
+      process.exit(0);
+    });
+  });
 });

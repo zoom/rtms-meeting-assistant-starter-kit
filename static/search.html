@@ -189,6 +189,115 @@
       background-color: #f0f0f0;
     }
 
+/* Real-time Dashboard Styles */
+.realtime-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.rt-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.rt-panel {
+  flex: 1;
+  min-width: 300px;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.rt-panel h4 {
+  margin: 0 0 15px 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #4285f4;
+  color: #333;
+  font-size: 1.1em;
+}
+
+.rt-transcript-content {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 12px;
+  height: 200px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #495057;
+}
+
+.rt-dialog-content {
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  padding: 12px;
+  height: 150px;
+  overflow-y: auto;
+}
+
+.rt-dialog-content p {
+  margin: 0;
+  font-style: italic;
+  color: #856404;
+}
+
+#rt-sentiment-info {
+  font-size: 12px;
+  color: #6c757d;
+  text-align: center;
+}
+
+#rt-query-interface .search-box {
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+#rt-query-interface input,
+#rt-query-interface button {
+  margin-bottom: 0;
+}
+
+/* Connection Status */
+.rt-connection-status {
+  margin-top: 20px;
+  text-align: center;
+}
+
+#rt-connection-status {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.status-disconnected {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.status-connected {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-connecting {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
 
   </style>
 </head>
@@ -270,9 +379,55 @@
 
     <div id="realtime" class="tab-content">
       <div class="section">
-        <div class="heading">Real-time Monitoring</div>
-        <div class="results">
-          <p>Real-time monitoring features will be available here.</p>
+        <div class="heading">Real-time Meeting Intelligence Dashboard</div>
+
+        <div class="realtime-dashboard">
+          <div class="rt-row">
+            <!-- Live Transcript (Left) -->
+            <div class="rt-panel transcript-panel">
+              <h4>📝 Live Transcript</h4>
+              <div id="rt-transcript" class="rt-transcript-content">
+                Waiting for meeting data...
+              </div>
+            </div>
+
+            <!-- Sentiment Analysis (Right) -->
+            <div class="rt-panel sentiment-panel">
+              <h4>😊 Sentiment Analysis</h4>
+              <div id="rt-sentiment-container">
+                <div id="rt-sentiment-chart" style="height: 200px;"></div>
+                <div id="rt-sentiment-info" style="margin-top: 10px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rt-row">
+            <!-- Dialog Suggestions (Left) -->
+            <div class="rt-panel dialog-panel">
+              <h4>🎲 Dialog Suggestions</h4>
+              <div id="rt-dialog-suggestions" class="rt-dialog-content">
+                <p>AI conversation guidance will appear here...</p>
+              </div>
+            </div>
+
+            <!-- Meeting Query (Right) -->
+            <div class="rt-panel query-panel">
+              <h4>❓ Meeting Query</h4>
+              <div id="rt-query-interface">
+                <div class="search-box">
+                  <input type="text" id="rt-query-input" placeholder="Ask about the current meeting..." style="margin-bottom: 10px;">
+                  <button id="rt-query-button" style="width: 100%;">Ask AI</button>
+                </div>
+                <div id="rt-query-results" class="results" style="margin-top: 10px; min-height: 100px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rt-connection-status">
+          <div id="rt-connection-status" class="status-disconnected">
+            🔴 Not Connected
+          </div>
         </div>
       </div>
     </div>
@@ -280,6 +435,9 @@
 
 
 
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="static/search.js"></script>
+</body>
+</html>
 </body>
 </html>
