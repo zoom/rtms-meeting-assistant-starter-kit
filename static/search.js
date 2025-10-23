@@ -663,6 +663,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     resultsDiv.innerHTML = 'Asking AI...';
 
+    const urlMeetingUuid = new URLSearchParams(window.location.search).get('meeting') || 'global';
+    const selectedMeetingUuid = meetingUuidSelect.value || urlMeetingUuid;
+    const configResponse = await fetch('/api/config');
+    const config = await configResponse.json();
+    const defaultMeetingUuid = config.availableMeetings ? config.availableMeetings[0] : 'global';
+    const meetingUuid = selectedMeetingUuid !== 'global' ? selectedMeetingUuid : defaultMeetingUuid;
+    console.log('meetinguuid:', meetingUuid);
+    console.log('query:', query);
+
     try {
       const response = await fetch('/api/meeting-query', {
         method: 'POST',
@@ -671,7 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         body: JSON.stringify({
           query,
-          meetingUuid: new URLSearchParams(window.location.search).get('meeting') || 'global'
+          meetingUuid: meetingUuid
         })
       });
 

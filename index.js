@@ -631,15 +631,40 @@ app.get('/search', (req, res) => {
 
 // GET /api/config - Return configuration for client
 app.get('/api/config', (req, res) => {
+  const meetingUuid = req.query.meeting || 'global';
+
+  // List available meetings (those with transcript.vtt files)
+  const availableMeetings = [];
+  try {
+    const recordingsDir = 'recordings';
+    if (fs.existsSync(recordingsDir)) {
+      const dirs = fs.readdirSync(recordingsDir, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+      dirs.forEach(dir => {
+        const transcriptPath = path.join(recordingsDir, dir, 'transcript.vtt');
+        if (fs.existsSync(transcriptPath)) {
+          availableMeetings.push(dir);
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error listing available meetings:', err);
+  }
+
   res.json({
-    websocketUrl: process.env.WEBSOCKET_URL || 'rtms.asdc.cc/client-websocket'
+    websocketUrl: process.env.WEBSOCKET_URL || 'rtms.asdc.cc/client-websocket',
+    meetingUuid: meetingUuid,
+    availableMeetings: availableMeetings
   });
 });
 
 // POST /api/meeting-query - Handle queries about current meeting
+// POST /api/meeting-query - Handle queries about current meeting
 app.post('/api/meeting-query', async (req, res) => {
   try {
     const { meetingUuid, query } = req.body;
+    console.log('Meeting query requested: meetingUuid=' + meetingUuid + ', query=' + query);
 
     if (!meetingUuid || !query) {
       return res.status(400).json({ error: 'Meeting UUID and query are required' });
