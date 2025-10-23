@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 import { saveRawAudio as saveRawAudioAdvance } from './saveRawAudioAdvance.js';
 import { saveRawVideo as saveRawVideoAdvance } from './saveRawVideoAdvance.js';
 import { writeTranscriptToVtt } from './writeTranscriptToVtt.js';
-import { chatWithOpenRouter,chatWithOpenRouterFast, generateDialogSuggestions, analyzeSentiment, queryCurrentMeeting } from './chatWithOpenrouter.js';
+import { chatWithOpenRouter,chatWithOpenRouterFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting } from './chatWithOpenrouter.js';
 import { convertMeetingMedia } from './convertMeetingMedia.js';
 import { muxFirstAudioVideo } from './muxFirstAudioVideo.js';
 import { handleShareData, generatePDFAndText } from './saveSharescreen.js';
@@ -780,7 +780,7 @@ app.get('/meeting-summary/:fileName', (req, res) => {
 
 // GET /meeting-pdf/:meetingUuid - Serve PDF file for a specific meeting
 app.get('/meeting-pdf/:meetingUuid', (req, res) => {
-  const meetingUuid = req.params.meetingUuid;
+  const meetingUuid = decodeURIComponent(req.params.meetingUuid);
   const safeMeetingUuid = sanitizeFileName(meetingUuid);
   const pdfPath = path.join('recordings', safeMeetingUuid, 'processed', 'approved.pdf');
 
@@ -895,14 +895,37 @@ function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
 
     const currentVTT = fs.readFileSync(vttPath, 'utf-8');
 
+    // Read events log and screen share images
+    const eventsLog = fs.existsSync(`recordings/${safeMeetingUuid}/events.log`) ? fs.readFileSync(`recordings/${safeMeetingUuid}/events.log`, 'utf-8') : '';
+
+    // Read screen share images and convert to base64
+    const processedDir = path.join('recordings', safeMeetingUuid, 'processed', 'jpg');
+    let imageBase64Array = [];
+    if (fs.existsSync(processedDir)) {
+      const imageFiles = fs.readdirSync(processedDir).filter(file => file.endsWith('.jpg'));
+      console.log(`Found ${imageFiles.length} screen share images for real-time summary`);
+      for (const imageFile of imageFiles) {
+        try {
+          const imagePath = path.join(processedDir, imageFile);
+          const imageBuffer = fs.readFileSync(imagePath);
+          const base64Data = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
+          imageBase64Array.push(base64Data);
+        } catch (err) {
+          console.error(`Error reading image ${imageFile} for real-time summary:`, err.message);
+        }
+      }
+    }
+
     // Process AI in non-blocking way
     Promise.all([
       generateDialogSuggestions(currentVTT),
-      analyzeSentiment(currentVTT)
-    ]).then(([dialogSuggestions, sentimentAnalysis]) => {
+      analyzeSentiment(currentVTT),
+      generateRealTimeSummary(currentVTT, eventsLog, imageBase64Array, meetingUuid)
+    ]).then(([dialogSuggestions, sentimentAnalysis, realTimeSummary]) => {
       // Update cache
       cache.dialog = dialogSuggestions;
       cache.sentiment = sentimentAnalysis;
+      cache.summary = realTimeSummary;
       cache.lastUpdated = now;
       aiCache.set(cacheKey, cache);
 
@@ -917,6 +940,11 @@ function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
       broadcastToWebSocketClients({
         type: 'sentiment',
         analysis: sentimentAnalysis
+      }, meetingUuid);
+
+      broadcastToWebSocketClients({
+        type: 'meeting_summary',
+        summary: realTimeSummary
       }, meetingUuid);
 
     }).catch(err => {

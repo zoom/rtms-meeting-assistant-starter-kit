@@ -78,12 +78,19 @@ document.addEventListener('DOMContentLoaded', () => {
             meetingUuidSelect.removeChild(meetingUuidSelect.lastChild);
           }
           foundUuids.forEach(uuid => {
-            // Find topic for this UUID
-            const topic = Object.keys(topicToUuidMap).find(t => topicToUuidMap[t] === uuid) || uuid;
+            // Sanitize UUID to match topic map format (replace slashes with underscores)
+            const sanitizedUuid = uuid.replace(/[<>:"\/\\|?*=\s]/g, '_');
+
+            // Find topic for this UUID (topicToUuidMap maps topic -> sanitized_uuid)
+            const topic = Object.keys(topicToUuidMap).find(t => topicToUuidMap[t] === sanitizedUuid) || '';
+
+            // Show topic + short UUID for identification
+            const shortUuid = uuid.replace(/[/]/g, '').substring(0, 8);
+            const displayText = topic ? `${topic} (${shortUuid}...)` : `Meeting ${shortUuid}...`;
 
             const option = document.createElement('option');
-            option.value = uuid; // Store UUID as value
-            option.textContent = topic; // Display topic text
+            option.value = uuid; // Store original UUID as value
+            option.textContent = displayText; // Display topic text
             meetingUuidSelect.appendChild(option);
           });
           // Auto-load first meeting
@@ -162,7 +169,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Function to create a clickable transcript element
   const createCueElement = (cue, text) => {
     const div = document.createElement('div');
-    div.textContent = text.trim();
+    // Format the start time for display
+    const startTime = new Date(cue.start * 1000).toISOString().substr(11, 8);
+    div.textContent = `[${startTime}] ${text.trim()}`;
     div.classList.add('transcript-line');
     div.onclick = () => {
       videoPlayer.currentTime = cue.start;
@@ -212,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
   pdfButton.addEventListener('click', () => {
     if (meetingUuidSelect.value) {
       const uuid = meetingUuidSelect.value;
-      pdfIframe.src = `/meeting-pdf/${uuid}`;
+      pdfIframe.src = `/meeting-pdf/${encodeURIComponent(uuid)}`;
       pdfSection.style.display = 'block';
     }
   });
@@ -247,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const response = await fetch(`/meeting-summary/${fileName}`);
       if (response.ok) {
         const content = await response.text();
-        inlineSummaryContent.innerHTML = markdownToHtml(content);
+        inlineSummaryContent.innerHTML = `<pre style="white-space: pre-wrap; font-family: monospace;">${content}</pre>`;
         summarySection.style.display = 'block';
       } else {
         inlineSummaryContent.innerHTML = 'Summary not available for this meeting.';
@@ -268,6 +277,47 @@ document.addEventListener('DOMContentLoaded', () => {
   // Summary functionality
   const summarySelect = document.getElementById('summary-select');
   const summaryResults = document.getElementById('summary-results');
+
+  // Function to load available meetings for video playback dropdown
+  const loadVideoMeetings = async () => {
+    try {
+      const configResponse = await fetch('/api/config');
+      if (configResponse.ok) {
+        const config = await configResponse.json();
+        const availableMeetings = config.availableMeetings || [];
+
+        // Clear existing options except the first
+        while (meetingUuidSelect.children.length > 1) {
+          meetingUuidSelect.removeChild(meetingUuidSelect.lastChild);
+        }
+
+        // Populate with topic names
+        availableMeetings.forEach(uuid => {
+          // topicToUuidMap maps topic -> uuid, we need uuid -> topic
+          let topic = null;
+          for (const [topicName, topicUuid] of Object.entries(topicToUuidMap)) {
+            if (topicUuid === uuid) {
+              topic = topicName;
+              break;
+            }
+          }
+
+          // Show topic + short UUID for identification
+          const shortUuid = uuid.replace(/[_]/g, '').substring(0, 8);
+          const displayText = topic ? `${topic} (${shortUuid}...)` : `Meeting ${shortUuid}...`;
+
+          const option = document.createElement('option');
+          option.value = uuid;
+          option.textContent = displayText;
+          meetingUuidSelect.appendChild(option);
+        });
+      } else {
+        console.error('Failed to load meeting config');
+      }
+    } catch (error) {
+      console.error('Error loading video meetings:', error);
+    }
+  };
 
   // Function to load summary files
   const loadSummaryFiles = async () => {
@@ -302,26 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Simple markdown to HTML converter
-  const markdownToHtml = (markdown) => {
-    // Just remove the tags and keep the content simple
-    let processed = markdown
-      // Remove section start markers like DECISIONS>
-      .replace(/^([A-Z_]+)>$/gm, '')
-      // Remove section end markers like </words>
-      .replace(/([A-Z_]+)>$/gm, '')
-      // Remove UUID markers but keep the UUID
-      .replace(/^UUID>([^>]+)UUID>$/gm, '<div class="uuid-section"><strong>UUID:</strong> $1</div>');
 
-    // Simple formatting - just preserve line breaks and basic structure
-    processed = processed
-      // Convert line breaks to br tags
-      .replace(/\n/g, '<br>')
-      // Handle word count
-      .replace(/Word Count: (\d+)$/, '<div class="word-count">Word Count: $1</div>');
-
-    return '<div class="summary-content">' + processed + '</div>';
-  };
 
   // Function to load summary content
   const loadSummaryContent = async (uuid) => {
@@ -335,7 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const response = await fetch(`/meeting-summary/${safeFileName}`);
       if (response.ok) {
         const content = await response.text();
-        summaryResults.innerHTML = markdownToHtml(content);
+        summaryResults.innerHTML = `<pre style="white-space: pre-wrap; font-family: monospace;">${content}</pre>`;
       } else {
         summaryResults.innerHTML = 'Error loading summary.';
       }
@@ -501,7 +532,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const config = await configResponse.json();
-      const websocketUrl = `${config.websocketUrl}?meeting=${encodeURIComponent(meetingUuid || 'global')}`;
+      let websocketUrl = config.websocketUrl;
+
+      // Ensure WebSocket URL has proper protocol
+      if (!websocketUrl.startsWith('ws://') && !websocketUrl.startsWith('wss://')) {
+        // Default to ws:// for local development, wss:// for remote servers
+        const isLocalhost = websocketUrl.startsWith('localhost') || websocketUrl.startsWith('127.0.0.1') || websocketUrl.includes('rtms.asdc.cc') === false;
+        websocketUrl = (isLocalhost ? 'ws://' : 'wss://') + websocketUrl;
+      }
+
+      websocketUrl = `${websocketUrl}?meeting=${encodeURIComponent(meetingUuid || 'global')}`;
 
       console.log('Connecting to real-time WebSocket:', websocketUrl);
 
@@ -643,6 +683,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         break;
 
+      case 'meeting_summary':
+        // Update real-time meeting summary
+        const summaryDiv = document.getElementById('rt-summary-content');
+        if (data.summary && data.summary.trim()) {
+          // Display the summary with preserved formatting
+          summaryDiv.innerHTML = data.summary;
+        } else {
+          summaryDiv.innerHTML = '<p>Summary not available yet...</p>';
+        }
+        break;
+
       default:
         console.log('Unknown WebSocket message type:', data.type);
     }
@@ -704,7 +755,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const topicsLoaded = await loadMeetingTopics();
     if (topicsLoaded) {
       console.log('Topics loaded successfully - enabling search functionality');
-      // Enable search form (it's already enabled, but now topics are available)
+
+      // Load video meetings dropdown
+      loadVideoMeetings();
 
       // Now load summary files
       loadSummaryFiles();
@@ -717,6 +770,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       console.error('Failed to load topics - search functionality may be limited');
       // Still allow basic functionality even if topics fail
+      loadVideoMeetings();
       loadSummaryFiles();
       connectRealTimeWebSocket('global');
     }

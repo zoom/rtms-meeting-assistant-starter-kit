@@ -252,6 +252,37 @@ export async function analyzeSentiment(transcript) {
 }
 
 /**
+ * Generate a real-time meeting summary from transcript and images
+ * @param {string} transcript - Full current meeting transcript in VTT format
+ * @param {string} meetingEvents - Meeting events log (if available)
+ * @param {string[]} imageBase64Array - Array of base64 encoded screen share images
+ * @param {string} meetingUuid - Meeting UUID
+ * @returns {Promise<string>} Real-time meeting summary
+ */
+export async function generateRealTimeSummary(transcript, meetingEvents = '', imageBase64Array = [], meetingUuid = '') {
+  try {
+    // Read and populate the summary prompt
+    const summaryPromptTemplate = await import('fs').then(fs => fs.readFileSync('summary_prompt.md', 'utf-8'));
+    const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+    const filledPrompt = summaryPromptTemplate
+      .replace(/\{\{raw_transcript\}\}/g, transcript)
+      .replace(/\{\{meeting_events\}\}/g, meetingEvents)
+      .replace(/\{\{meeting_uuid\}\}/g, meetingUuid)
+      .replace(/\{\{TODAYDATE\}\}/g, todayDate);
+
+    console.log('📝 Generating real-time meeting summary...');
+    const response = await chatWithOpenRouter(filledPrompt, undefined, imageBase64Array);
+
+    console.log('✅ Real-time summary generated');
+    return response;
+  } catch (err) {
+    console.error('❌ Error generating real-time summary:', err.message);
+    return 'Unable to generate summary at this time. Meeting in progress...';
+  }
+}
+
+/**
  * Query the current meeting transcript for specific questions
  * @param {string} transcript - Full current meeting transcript
  * @param {string} userQuery - User's question about the meeting

@@ -40,9 +40,9 @@ Important Considerations:
 5. Recommendations: Provide recommendations which the user needs to do for action items in addition to what is being summarized. These would include but not limited to recommending the user to read up or look up on additional information, asking specific user about something, follow up with other user on something. Consider the absent, or semi-absent users who are in the meeting as well, and how they might have missed out critical information in the meeting prior or post leaving the meeting. If you think there are missing context which can be found in previous meetings, let the user know in the recommendations
 
 Output format:
-    <DATE>Date and time as provided, if it is missing, use the datetime from your server,and set the timezone to GTM +0</DATE>
+ <TOPIC>The agenda or topic of the meeting</TOPIC>
+    <DATE>Datetime as provided, if it is missing, use the datetime from your server,and set the timezone to GTM +0</DATE>
     <MEETING_UUID>provide the meeting uuid here</MEETING_UUID>
-    <TOPIC>The agenda or topic of the meeting</TOPIC>
     <SUMMARY>High-level overview of meeting purpose and outcomes.</SUMMARY>
     <KEY_DECISIONS>Bullet list of decisions/ discussion or conclusion made.</KEY_DECISIONS>
     <ACTION_ITEMS>Each action item with owner + due date (if mentioned).</ACTION_ITEMS>
