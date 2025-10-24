@@ -117,3 +117,34 @@
 .view-button:hover {
   background-color: #357ae8;
 }
+
+/* Live Meeting Indicators */
+.live-row {
+  background-color: #fff5f5 !important;
+  border-left: 4px solid #dc3545;
+}
+
+.live-row:hover {
+  background-color: #ffebee !important;
+}
+
+.live-badge {
+  display: inline-block;
+  background-color: #dc3545;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 3px;
+  margin-right: 8px;
+  letter-spacing: 0.5px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.live-button {
+  background-color: #dc3545 !important;
+}
+
+.live-button:hover {
+  background-color: #c82333 !important;
+}

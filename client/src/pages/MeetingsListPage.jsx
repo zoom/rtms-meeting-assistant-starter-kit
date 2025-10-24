@@ -1,14 +1,22 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useMeetingTopics } from '../context/MeetingTopicsContext'
 import '../styles/MeetingsListPage.css'
 
 function MeetingsListPage() {
+  const { getDisplayName, getTopicName } = useMeetingTopics()
   const [meetings, setMeetings] = useState([])
+  const [liveMeetings, setLiveMeetings] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     loadMeetings()
+    loadLiveMeetings()
+
+    // Poll for live meetings every 10 seconds
+    const interval = setInterval(loadLiveMeetings, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   const loadMeetings = async () => {
@@ -25,9 +33,31 @@ function MeetingsListPage() {
     }
   }
 
-  const filteredMeetings = meetings.filter((meeting) =>
-    (meeting.title || meeting.uuid).toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const loadLiveMeetings = async () => {
+    try {
+      const response = await fetch('/api/live-meetings')
+      if (response.ok) {
+        const data = await response.json()
+        setLiveMeetings(data)
+      }
+    } catch (error) {
+      console.error('Error loading live meetings:', error)
+    }
+  }
+
+  const isLive = (uuid) => {
+    return liveMeetings.some((live) => live.uuid === uuid)
+  }
+
+  const filteredMeetings = meetings.filter((meeting) => {
+    const displayName = getDisplayName(meeting.uuid)
+    const topicName = getTopicName(meeting.uuid)
+    return (
+      displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      topicName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      meeting.uuid.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  })
 
   return (
     <div className="meetings-list-page">
@@ -69,9 +99,10 @@ function MeetingsListPage() {
                 <div className="col-actions">Actions</div>
               </div>
               {filteredMeetings.map((meeting) => (
-                <div key={meeting.uuid} className="table-row">
+                <div key={meeting.uuid} className={`table-row ${isLive(meeting.uuid) ? 'live-row' : ''}`}>
                   <div className="col-title">
-                    {meeting.title || meeting.uuid}
+                    {isLive(meeting.uuid) && <span className="live-badge">LIVE</span>}
+                    {getDisplayName(meeting.uuid)}
                   </div>
                   <div className="col-date">
                     {new Date(meeting.date).toLocaleDateString()} {new Date(meeting.date).toLocaleTimeString()}
@@ -80,9 +111,15 @@ function MeetingsListPage() {
                     {meeting.duration || 'N/A'}
                   </div>
                   <div className="col-actions">
-                    <Link to={`/meetings/${meeting.uuid}`} className="view-button">
-                      View
-                    </Link>
+                    {isLive(meeting.uuid) ? (
+                      <Link to={`/meeting/${meeting.uuid}`} className="view-button live-button">
+                        View Live
+                      </Link>
+                    ) : (
+                      <Link to={`/meetings/${meeting.uuid}`} className="view-button">
+                        View
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}

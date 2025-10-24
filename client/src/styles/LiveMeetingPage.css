@@ -1,0 +1,250 @@
+.live-meeting-page {
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.connection-status {
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-indicator {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.status-indicator.connected {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-indicator.disconnected {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.connection-status h2 {
+  margin: 0;
+  color: #333;
+}
+
+.live-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.dashboard-section {
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-section h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+  border-bottom: 2px solid #4285f4;
+  padding-bottom: 10px;
+}
+
+/* Transcript Section */
+.transcript-section {
+  grid-column: 1 / -1;
+}
+
+.transcript-box {
+  max-height: 400px;
+  overflow-y: auto;
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 15px;
+}
+
+.transcript-line {
+  padding: 8px 0;
+  border-bottom: 1px solid #e8e8e8;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.transcript-line:last-child {
+  border-bottom: none;
+}
+
+.transcript-line .timestamp {
+  color: #4285f4;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.transcript-line .user {
+  color: #666;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.transcript-line .text {
+  color: #333;
+}
+
+/* Sentiment Section */
+.sentiment-button {
+  width: 100%;
+  padding: 12px 24px;
+  background-color: #4285f4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: background-color 0.2s;
+  margin-bottom: 15px;
+}
+
+.sentiment-button:hover:not(:disabled) {
+  background-color: #357ae8;
+}
+
+.sentiment-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.sentiment-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.sentiment-word {
+  padding: 10px 20px;
+  background-color: #e8f4fd;
+  border: 2px solid #4285f4;
+  border-radius: 25px;
+  color: #1967d2;
+  font-size: 16px;
+  font-weight: 600;
+  text-transform: capitalize;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.sentiment-info {
+  margin-top: 10px;
+  color: #666;
+  font-size: 14px;
+  text-align: center;
+  font-style: italic;
+}
+
+/* Suggestions Section */
+.suggestions-box {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.suggestion-item {
+  padding: 12px;
+  margin-bottom: 10px;
+  background-color: #e8f4fd;
+  border-left: 4px solid #4285f4;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.suggestion-item strong {
+  color: #4285f4;
+  margin-right: 8px;
+}
+
+/* Summary Section */
+.summary-box {
+  max-height: 300px;
+  overflow-y: auto;
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 15px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Query Section */
+.query-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.query-input {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  outline: none;
+}
+
+.query-input:focus {
+  border-color: #4285f4;
+}
+
+.query-button {
+  padding: 12px 24px;
+  background-color: #4285f4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.query-button:hover:not(:disabled) {
+  background-color: #357ae8;
+}
+
+.query-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.query-result {
+  padding: 15px;
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #999;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .live-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .connection-status {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}

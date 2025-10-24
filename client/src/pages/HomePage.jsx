@@ -1,16 +1,24 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useMeetingTopics } from '../context/MeetingTopicsContext'
 import '../styles/HomePage.css'
 
 function HomePage() {
+  const { getDisplayName } = useMeetingTopics()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [recentMeetings, setRecentMeetings] = useState([])
+  const [liveMeetings, setLiveMeetings] = useState([])
 
   useEffect(() => {
-    // Load recent meetings
+    // Load recent meetings and live meetings
     loadRecentMeetings()
+    loadLiveMeetings()
+
+    // Poll for live meetings every 10 seconds
+    const interval = setInterval(loadLiveMeetings, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   const loadRecentMeetings = async () => {
@@ -22,6 +30,18 @@ function HomePage() {
       }
     } catch (error) {
       console.error('Error loading recent meetings:', error)
+    }
+  }
+
+  const loadLiveMeetings = async () => {
+    try {
+      const response = await fetch('/api/live-meetings')
+      if (response.ok) {
+        const data = await response.json()
+        setLiveMeetings(data)
+      }
+    } catch (error) {
+      console.error('Error loading live meetings:', error)
     }
   }
 
@@ -109,6 +129,31 @@ function HomePage() {
           )}
         </section>
 
+        {liveMeetings.length > 0 && (
+          <section className="live-meetings">
+            <h3>
+              <span className="live-indicator">🔴</span> Live Meetings
+            </h3>
+            <div className="meetings-list">
+              {liveMeetings.map((meeting) => (
+                <Link
+                  key={meeting.uuid}
+                  to={`/meeting/${meeting.uuid}`}
+                  className="meeting-card live-card"
+                >
+                  <div className="meeting-title">
+                    <span className="live-badge">LIVE</span>
+                    {getDisplayName(meeting.uuid)}
+                  </div>
+                  <div className="meeting-status">
+                    Active meeting in progress
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {recentMeetings.length > 0 && (
           <section className="recent-meetings">
             <h3>Recent Meetings</h3>
@@ -119,7 +164,7 @@ function HomePage() {
                   to={`/meetings/${meeting.uuid}`}
                   className="meeting-card"
                 >
-                  <div className="meeting-title">{meeting.title || meeting.uuid}</div>
+                  <div className="meeting-title">{getDisplayName(meeting.uuid)}</div>
                   <div className="meeting-date">{new Date(meeting.date).toLocaleDateString()}</div>
                 </Link>
               ))}

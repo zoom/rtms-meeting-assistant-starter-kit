@@ -2,7 +2,6 @@ import express from 'express';
 import crypto from 'crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
-import helmet from 'helmet'
 import fs from 'fs';
 import helmet from 'helmet';
 import path from 'path';
@@ -13,7 +12,7 @@ import { fileURLToPath } from 'url';
 import { saveRawAudio as saveRawAudioAdvance } from './saveRawAudioAdvance.js';
 import { saveRawVideo as saveRawVideoAdvance } from './saveRawVideoAdvance.js';
 import { writeTranscriptToVtt } from './writeTranscriptToVtt.js';
-import { chatWithOpenRouter,chatWithOpenRouterFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting } from './chatWithOpenrouter.js';
+import { chatWithOpenRouter,chatWithOpenRouterFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting, analyzeDescriptiveSentiment } from './chatWithOpenrouter.js';
 import { convertMeetingMedia } from './convertMeetingMedia.js';
 import { muxFirstAudioVideo } from './muxFirstAudioVideo.js';
 import { handleShareData, generatePDFAndText } from './saveSharescreen.js';
@@ -621,8 +620,8 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
           timestamp: timestamp
         }, meetingUuid);
 
-        // Schedule AI processing (cached, 15-second intervals)
-        scheduleAIProcessing(meetingUuid, safeMeetingUuid);
+        // Schedule AI processing (cached, 15-second intervals) - Sentiment removed from auto-processing
+        scheduleAIProcessingWithoutSentiment(meetingUuid, safeMeetingUuid);
       }
 
       // Handle chat data
@@ -744,6 +743,31 @@ app.get('/search', (req, res) => {
 });
 
 // GET /api/config - Return configuration for client
+// GET /api/live-meetings - Get currently active meetings
+app.get('/api/live-meetings', (req, res) => {
+  try {
+    const liveMeetings = [];
+
+    // Get all meetings with active WebSocket connections
+    activeConnections.forEach((conn, meetingUuid) => {
+      if (conn.signaling || conn.media) {
+        liveMeetings.push({
+          uuid: meetingUuid,
+          hasSignaling: !!conn.signaling,
+          hasMedia: !!conn.media,
+          startTime: conn.startTime,
+          uptime: Date.now() - (conn.startTime || Date.now())
+        });
+      }
+    });
+
+    res.json(liveMeetings);
+  } catch (error) {
+    console.error('Error listing live meetings:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.get('/api/config', (req, res) => {
   const meetingUuid = req.query.meeting || 'global';
 
@@ -798,6 +822,33 @@ app.post('/api/meeting-query', async (req, res) => {
   } catch (error) {
     console.error('Meeting query error:', error);
     res.status(500).json({ error: 'Failed to process meeting query' });
+  }
+});
+
+// POST /api/analyze-sentiment - On-demand descriptive sentiment analysis
+app.post('/api/analyze-sentiment', async (req, res) => {
+  try {
+    const { meetingUuid } = req.body;
+    console.log('Sentiment analysis requested for meeting:', meetingUuid);
+
+    if (!meetingUuid) {
+      return res.status(400).json({ error: 'Meeting UUID is required' });
+    }
+
+    const safeMeetingUuid = sanitizeFileName(meetingUuid);
+    const vttPath = `recordings/${safeMeetingUuid}/transcript.vtt`;
+
+    if (!fs.existsSync(vttPath)) {
+      return res.status(404).json({ error: 'Meeting transcript not found' });
+    }
+
+    const transcript = fs.readFileSync(vttPath, 'utf-8');
+    const sentimentWords = await analyzeDescriptiveSentiment(transcript);
+
+    res.json({ sentimentWords });
+  } catch (error) {
+    console.error('Sentiment analysis error:', error);
+    res.status(500).json({ error: 'Failed to analyze sentiment' });
   }
 });
 
@@ -990,15 +1041,16 @@ function broadcastToWebSocketClients(message, meetingUuid = null) {
   }
 }
 
-// AI Processing scheduler with caching (15-second intervals)
-function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
+// AI Processing scheduler WITHOUT sentiment (60-second intervals for dialog and summary only)
+// COST OPTIMIZATION: Reduced from 15s to 60s, disabled real-time image processing
+function scheduleAIProcessingWithoutSentiment(meetingUuid, safeMeetingUuid) {
   const now = Date.now();
   const cacheKey = meetingUuid;
   const cache = aiCache.get(cacheKey) || {};
 
-  // Only process if 15+ seconds since last update
-  if (!cache.lastUpdated || (now - cache.lastUpdated) > 15000) {
-    console.log('🧠 Starting AI processing for meeting:', meetingUuid);
+  // Only process if 60+ seconds since last update (COST OPTIMIZATION: was 15s)
+  if (!cache.lastUpdated || (now - cache.lastUpdated) > 60000) {
+    console.log('🧠 Starting AI processing (dialog + summary) for meeting:', meetingUuid);
 
     // Read full VTT transcript for AI context
     const vttPath = `recordings/${safeMeetingUuid}/transcript.vtt`;
@@ -1009,12 +1061,17 @@ function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
 
     const currentVTT = fs.readFileSync(vttPath, 'utf-8');
 
-    // Read events log and screen share images
+    // Read events log
     const eventsLog = fs.existsSync(`recordings/${safeMeetingUuid}/events.log`) ? fs.readFileSync(`recordings/${safeMeetingUuid}/events.log`, 'utf-8') : '';
 
-    // Read screen share images and convert to base64
-    const processedDir = path.join('recordings', safeMeetingUuid, 'processed', 'jpg');
+    // COST OPTIMIZATION: Disabled real-time image processing
+    // Images are expensive (~1000 tokens each) and sending ALL images every 60s is wasteful
+    // Images are still processed in the post-meeting summary (see rtms.stopped webhook)
+    // Previous cost: $25-$35/hour with 50 images, Now: $0
     let imageBase64Array = [];
+
+    /* DISABLED for cost savings - uncomment if needed
+    const processedDir = path.join('recordings', safeMeetingUuid, 'processed', 'jpg');
     if (fs.existsSync(processedDir)) {
       const imageFiles = fs.readdirSync(processedDir).filter(file => file.endsWith('.jpg'));
       console.log(`Found ${imageFiles.length} screen share images for real-time summary`);
@@ -1029,31 +1086,25 @@ function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
         }
       }
     }
+    */
 
-    // Process AI in non-blocking way
+    // Process AI in non-blocking way (NO SENTIMENT)
     Promise.all([
       generateDialogSuggestions(currentVTT),
-      analyzeSentiment(currentVTT),
       generateRealTimeSummary(currentVTT, eventsLog, imageBase64Array, meetingUuid)
-    ]).then(([dialogSuggestions, sentimentAnalysis, realTimeSummary]) => {
+    ]).then(([dialogSuggestions, realTimeSummary]) => {
       // Update cache
       cache.dialog = dialogSuggestions;
-      cache.sentiment = sentimentAnalysis;
       cache.summary = realTimeSummary;
       cache.lastUpdated = now;
       aiCache.set(cacheKey, cache);
 
-      console.log('✅ AI processing complete, broadcasting results');
+      console.log('✅ AI processing (dialog + summary) complete, broadcasting results');
 
       // Broadcast AI results to clients
       broadcastToWebSocketClients({
         type: 'ai_dialog',
         suggestions: dialogSuggestions
-      }, meetingUuid);
-
-      broadcastToWebSocketClients({
-        type: 'sentiment',
-        analysis: sentimentAnalysis
       }, meetingUuid);
 
       broadcastToWebSocketClients({

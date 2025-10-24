@@ -310,3 +310,49 @@ export async function queryCurrentMeeting(transcript, userQuery) {
     return 'I apologize, but I was unable to analyze the current meeting transcript. Please try again later.';
   }
 }
+
+/**
+ * Analyze overall meeting sentiment with descriptive words
+ * @param {string} transcript - Full meeting transcript text
+ * @returns {Promise<string[]>} Array of descriptive sentiment words
+ */
+export async function analyzeDescriptiveSentiment(transcript) {
+  try {
+    const prompt = `Analyze the overall sentiment and mood of this meeting transcript.
+
+Meeting Transcript:
+${transcript}
+
+Based on this transcript, select 3-5 descriptive words that best capture the overall sentiment and mood of the meeting. Choose from this approved list:
+
+POSITIVE: happy, satisfied, enthusiastic, engaged, productive, collaborative, supportive, optimistic, energetic, agreeable, motivated, confident, interested, likely to buy, ready to proceed
+
+NEUTRAL: informational, analytical, procedural, matter-of-fact, objective, professional, balanced
+
+NEGATIVE: concerned, skeptical, hesitant, frustrated, tense, disagreeing, uncertain, resistant, disengaged, cautious
+
+Return ONLY the selected words as a comma-separated list with NO additional text or explanation.
+
+Example response: "engaged, productive, collaborative"`;
+
+    console.log('😊 Analyzing descriptive sentiment from transcript...');
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENROUTER_MODEL || 'openai/gpt-5-chat',
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawContent = response.choices[0].message.content.trim();
+
+    // Parse comma-separated words
+    const sentimentWords = rawContent
+      .split(',')
+      .map(word => word.trim())
+      .filter(word => word.length > 0);
+
+    console.log(`✅ Descriptive sentiment analysis completed: ${sentimentWords.join(', ')}`);
+    return sentimentWords;
+  } catch (err) {
+    console.error('❌ Error analyzing descriptive sentiment:', err.message);
+    return ['neutral', 'professional']; // Fallback
+  }
+}
