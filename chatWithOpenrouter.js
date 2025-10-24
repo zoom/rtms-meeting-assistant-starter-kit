@@ -45,6 +45,12 @@ export async function chatWithOpenRouter(message, model = process.env.OPENROUTER
     return response.choices[0].message.content;
   } catch (err) {
     console.error('❌ Error with OpenRouter:', err.response?.data || err.message);
+    // Try falling back to google/gemini-2.0-flash-exp if not already using it
+    if (model !== 'google/gemini-2.5-pro') {
+      console.log('🔄 Retrying with google/gemini-2.5-pro...');
+      return await chatWithOpenRouter(message, 'google/gemini-2.5-pro', images);
+    }
+    // If already tried the fallback or fallback also fails, throw the original error
     throw err;
   }
 }
