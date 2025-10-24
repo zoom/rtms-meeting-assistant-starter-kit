@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useMeetingTopics } from '../context/MeetingTopicsContext'
+import { encodeMeetingId } from '../utils/meetingUtils'
 import '../styles/MeetingsListPage.css'
 
 function MeetingsListPage() {
@@ -112,11 +113,11 @@ function MeetingsListPage() {
                   </div>
                   <div className="col-actions">
                     {isLive(meeting.uuid) ? (
-                      <Link to={`/meeting/${meeting.uuid}`} className="view-button live-button">
+                      <Link to={`/meeting/${encodeMeetingId(meeting.uuid)}`} className="view-button live-button">
                         View Live
                       </Link>
                     ) : (
-                      <Link to={`/meetings/${meeting.uuid}`} className="view-button">
+                      <Link to={`/meetings/${encodeMeetingId(meeting.uuid)}`} className="view-button">
                         View
                       </Link>
                     )}

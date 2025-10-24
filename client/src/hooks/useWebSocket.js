@@ -17,7 +17,8 @@ export function useWebSocket(meetingUuid = 'global') {
       const config = await configResponse.json()
       let websocketUrl = config.websocketUrl
 
-      // Ensure WebSocket URL has proper protocol
+      // Backend now returns full URL with protocol (ws:// or wss://)
+      // But handle legacy format (hostname only) for backwards compatibility
       if (!websocketUrl.startsWith('ws://') && !websocketUrl.startsWith('wss://')) {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         websocketUrl = (isLocalhost ? 'ws://' : 'wss://') + websocketUrl
@@ -25,6 +26,7 @@ export function useWebSocket(meetingUuid = 'global') {
 
       const url = `${websocketUrl}?meeting=${encodeURIComponent(meetingUuid)}`
       console.log('Connecting to WebSocket:', url)
+      console.log('Meeting UUID:', meetingUuid)
 
       const ws = new WebSocket(url)
       wsRef.current = ws
@@ -37,6 +39,7 @@ export function useWebSocket(meetingUuid = 'global') {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
+          console.log('WebSocket message received:', data)
           setMessages((prev) => [...prev, data])
         } catch (err) {
           console.error('Error parsing WebSocket message:', err)

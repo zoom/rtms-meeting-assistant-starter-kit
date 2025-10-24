@@ -1,22 +1,22 @@
 import { useState, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useWebSocket } from '../hooks/useWebSocket'
+import { decodeMeetingId } from '../utils/meetingUtils'
 import '../styles/LiveMeetingPage.css'
 
 function LiveMeetingPage() {
-  const { meetingId } = useParams()
+  const { meetingId: encodedMeetingId } = useParams()
+  const meetingId = decodeMeetingId(encodedMeetingId)
   const { isConnected, messages } = useWebSocket(meetingId || 'global')
 
   const [transcript, setTranscript] = useState([])
   const [sentimentWords, setSentimentWords] = useState([])
-  const [dialogSuggestions, setDialogSuggestions] = useState([])
-  const [meetingSummary, setMeetingSummary] = useState('')
   const [query, setQuery] = useState('')
   const [queryResult, setQueryResult] = useState('')
   const [isQuerying, setIsQuerying] = useState(false)
   const [isAnalyzingSentiment, setIsAnalyzingSentiment] = useState(false)
 
-  // Process WebSocket messages
+  // Process WebSocket messages - DEMO MODE: Only transcript, no auto-AI
   useEffect(() => {
     if (messages.length === 0) return
 
@@ -27,14 +27,6 @@ function LiveMeetingPage() {
         const timestamp = new Date(lastMessage.timestamp > 1e12 ? lastMessage.timestamp : lastMessage.timestamp * 1000).toLocaleTimeString()
         const user = lastMessage.user ? `${lastMessage.user}: ` : ''
         setTranscript((prev) => [...prev, { timestamp, user, text: lastMessage.text }])
-        break
-
-      case 'ai_dialog':
-        setDialogSuggestions(lastMessage.suggestions || [])
-        break
-
-      case 'meeting_summary':
-        setMeetingSummary(lastMessage.summary || '')
         break
 
       default:
@@ -138,58 +130,7 @@ function LiveMeetingPage() {
             </div>
           </section>
 
-          {/* Sentiment Analysis */}
-          <section className="dashboard-section sentiment-section">
-            <h3>Meeting Sentiment</h3>
-            <button
-              onClick={handleAnalyzeSentiment}
-              className="sentiment-button"
-              disabled={isAnalyzingSentiment}
-            >
-              {isAnalyzingSentiment ? 'Analyzing...' : 'Analyze Sentiment'}
-            </button>
-            {sentimentWords.length > 0 && (
-              <div className="sentiment-words">
-                {sentimentWords.map((word, idx) => (
-                  <span key={idx} className="sentiment-word">
-                    {word}
-                  </span>
-                ))}
-              </div>
-            )}
-            {sentimentWords.length === 0 && !isAnalyzingSentiment && (
-              <p className="sentiment-info">Click the button to analyze overall meeting sentiment</p>
-            )}
-          </section>
-
-          {/* Dialog Suggestions */}
-          <section className="dashboard-section suggestions-section">
-            <h3>AI Dialog Suggestions</h3>
-            <div className="suggestions-box">
-              {dialogSuggestions.length === 0 && (
-                <p className="empty-state">No suggestions yet...</p>
-              )}
-              {dialogSuggestions.map((suggestion, idx) => (
-                <div key={idx} className="suggestion-item">
-                  <strong>{idx + 1}.</strong> {suggestion}
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Real-time Summary */}
-          <section className="dashboard-section summary-section">
-            <h3>Meeting Summary (Live)</h3>
-            <div className="summary-box">
-              {meetingSummary ? (
-                <div dangerouslySetInnerHTML={{ __html: meetingSummary }} />
-              ) : (
-                <p className="empty-state">Summary not available yet...</p>
-              )}
-            </div>
-          </section>
-
-          {/* Query Interface */}
+          {/* Query Interface - On Demand */}
           <section className="dashboard-section query-section">
             <h3>Ask About This Meeting</h3>
             <form onSubmit={handleQuery} className="query-form">
@@ -209,6 +150,33 @@ function LiveMeetingPage() {
               <div className="query-result">
                 <div dangerouslySetInnerHTML={{ __html: queryResult }} />
               </div>
+            )}
+          </section>
+
+          {/* Sentiment Analysis - On Demand */}
+          <section className="dashboard-section sentiment-section">
+            <h3>Meeting Sentiment Analysis</h3>
+            <button
+              onClick={handleAnalyzeSentiment}
+              className="sentiment-button"
+              disabled={isAnalyzingSentiment || transcript.length === 0}
+            >
+              {isAnalyzingSentiment ? 'Analyzing...' : 'Analyze Sentiment'}
+            </button>
+            {sentimentWords.length > 0 && (
+              <div className="sentiment-words">
+                {sentimentWords.map((word, idx) => (
+                  <span key={idx} className="sentiment-word">
+                    {word}
+                  </span>
+                ))}
+              </div>
+            )}
+            {sentimentWords.length === 0 && !isAnalyzingSentiment && transcript.length > 0 && (
+              <p className="sentiment-info">Click to analyze the meeting sentiment from transcript</p>
+            )}
+            {transcript.length === 0 && (
+              <p className="sentiment-info">Waiting for transcript data...</p>
             )}
           </section>
         </div>

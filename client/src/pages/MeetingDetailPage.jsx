@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMeetingTopics } from '../context/MeetingTopicsContext'
+import { decodeMeetingId, sanitizeMeetingId } from '../utils/meetingUtils'
 import SpeakerTimeline from '../components/SpeakerTimeline'
 import '../styles/MeetingDetailPage.css'
 
 function MeetingDetailPage() {
-  const { meetingId } = useParams()
+  const { meetingId: encodedMeetingId } = useParams()
+  const meetingId = decodeMeetingId(encodedMeetingId)
   const { getDisplayName } = useMeetingTopics()
   const [meeting, setMeeting] = useState(null)
   const [transcript, setTranscript] = useState([])
@@ -23,7 +25,7 @@ function MeetingDetailPage() {
 
   const loadMeetingData = async () => {
     try {
-      const safeUuid = meetingId.replace(/[<>:"\/\\|?*=\s]/g, '_')
+      const safeUuid = sanitizeMeetingId(meetingId)
 
       // Load meeting metadata
       const metadataResponse = await fetch(`/api/meetings/${meetingId}`)

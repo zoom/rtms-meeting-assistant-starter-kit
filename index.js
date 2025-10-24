@@ -620,8 +620,9 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
           timestamp: timestamp
         }, meetingUuid);
 
-        // Schedule AI processing (cached, 15-second intervals) - Sentiment removed from auto-processing
-        scheduleAIProcessingWithoutSentiment(meetingUuid, safeMeetingUuid);
+        // DEMO MODE: Disabled automatic AI processing to reduce API costs
+        // AI features (sentiment, query) are now on-demand only (button clicks)
+        // scheduleAIProcessingWithoutSentiment(meetingUuid, safeMeetingUuid);
       }
 
       // Handle chat data
@@ -790,8 +791,20 @@ app.get('/api/config', (req, res) => {
     console.error('Error listing available meetings:', err);
   }
 
+  // Determine WebSocket URL based on environment
+  let websocketUrl;
+  if (process.env.WEBSOCKET_URL) {
+    // Use explicit WEBSOCKET_URL from .env if provided
+    websocketUrl = process.env.WEBSOCKET_URL;
+  } else {
+    // Auto-detect based on request headers
+    const protocol = req.headers['x-forwarded-proto'] === 'https' || req.secure ? 'wss' : 'ws';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    websocketUrl = `${protocol}://${host}`;
+  }
+
   res.json({
-    websocketUrl: process.env.WEBSOCKET_URL || 'rtms.asdc.cc/client-websocket',
+    websocketUrl: websocketUrl,
     meetingUuid: meetingUuid,
     availableMeetings: availableMeetings
   });

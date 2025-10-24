@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useMeetingTopics } from '../context/MeetingTopicsContext'
+import { encodeMeetingId } from '../utils/meetingUtils'
 import '../styles/HomePage.css'
 
 function HomePage() {
@@ -138,7 +139,7 @@ function HomePage() {
               {liveMeetings.map((meeting) => (
                 <Link
                   key={meeting.uuid}
-                  to={`/meeting/${meeting.uuid}`}
+                  to={`/meeting/${encodeMeetingId(meeting.uuid)}`}
                   className="meeting-card live-card"
                 >
                   <div className="meeting-title">
