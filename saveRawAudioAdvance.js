@@ -34,7 +34,8 @@ export function saveRawAudio(chunk, streamId, user_id, timestamp) {
     }
 
     // Handle padding for audio gaps only if the gap is 500ms or more
-    const lastTimestamp = lastAudioTimestamps.get(user_id) || timestamp;
+    const key = `${streamId}_${user_id}`;
+    const lastTimestamp = lastAudioTimestamps.get(key) || timestamp;
     const timeDifference = timestamp - lastTimestamp;
 
     // Assume audio sample rate of 16 kHz (mono)
@@ -48,7 +49,7 @@ export function saveRawAudio(chunk, streamId, user_id, timestamp) {
         }
     }
 
-    lastAudioTimestamps.set(user_id, timestamp);
+    lastAudioTimestamps.set(key, timestamp);
     stream.write(chunk);
 }
 
