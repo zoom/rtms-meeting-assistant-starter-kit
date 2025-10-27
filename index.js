@@ -67,13 +67,13 @@ app.use((req, res, next) => {
 // Serve static files (HTML, JS, etc.)
 app.use(express.static(__dirname));
 
-// Map to keep track of active WebSocket connections and audio chunks
+// Map to keep track of active WebSocket connections and audio chunks (stream_id -> connection data)
 const activeConnections = new Map();
 
-// WebSocket connection store for clients (meetingUuid -> [clientWs1, clientWs2, ...])
+// WebSocket connection store for clients (stream_id -> [clientWs1, clientWs2, ...])  
 const clientWebSocketConnections = new Map();
 
-// AI Results cache per meeting (meetingUuid -> {dialog, sentiment, lastUpdated})
+// AI Results cache per meeting (stream_id -> {dialog, sentiment, lastUpdated})
 const aiCache = new Map();
 
 
@@ -580,11 +580,6 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
       if (msg.msg_type === 14 && msg.content && msg.content.data) {
 
         let { user_id, user_name, data: audioData, timestamp } = msg.content;
-        if (user_id == null || !meetingUuid) {
-          console.error('Missing metadata: cannot save audio');
-          return;
-        }
-
         let buffer = Buffer.from(audioData, 'base64');
         //console.log(`Processing audio data for user ${user_name} (ID: ${user_id}), buffer size: ${buffer.length} bytes`);
         saveRawAudioAdvance(buffer, meetingUuid, user_id, Date.now()); // Primary method
@@ -608,8 +603,7 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
       // Handle transcript data
       if (msg.msg_type === 17 && msg.content && msg.content.data) {
         let { user_id, user_name, data, timestamp } = msg.content;
-        console.log(`Processing transcript: "${data}" from user ${user_name} (ID: ${user_id})`);
-
+        //console.log(`Processing transcript: "${data}" from user ${user_name} (ID: ${user_id})`);
         // Write transcript to VTT file
         writeTranscriptToVtt(user_name, timestamp / 1000, data, safeMeetingUuid);
 
@@ -682,7 +676,7 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-// POST /api/meeting-query - Handle queries about current meeting
+
 // POST /api/meeting-query - Handle queries about current meeting
 app.post('/api/meeting-query', async (req, res) => {
   try {
