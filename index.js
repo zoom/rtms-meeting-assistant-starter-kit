@@ -102,45 +102,43 @@ app.post(WEBHOOK_PATH, async (req, res) => {
   if (event === 'meeting.rtms_started') {
     console.log('RTMS Started event received');
     const { meeting_uuid, rtms_stream_id, server_urls } = payload;
-    // Store mapping for cleanup (temporary until stopped events include stream_id)
-    meetingUuidToStreamId.set(meeting_uuid, rtms_stream_id);
     // Initiate connection to the signaling WebSocket server
-    connectToSignalingWebSocket(rtms_stream_id, rtms_stream_id, server_urls);
+    connectToSignalingWebSocket(meeting_uuid, rtms_stream_id, server_urls);
   }
 
   // Handle RTMS stopped event
   if (event === 'meeting.rtms_stopped') {
     console.log('RTMS Stopped event received');
-    const { meeting_uuid } = payload;
+    const { rtms_stream_id } = payload;
 
     // Close all active WebSocket connections for the given meeting UUID
-    if (activeConnections.has(meeting_uuid)) {
-      const connections = activeConnections.get(meeting_uuid);
-      console.log('Closing active connections for meeting: ' + meeting_uuid);
+    if (activeConnections.has(rtms_stream_id)) {
+      const connections = activeConnections.get(rtms_stream_id);
+      console.log('Closing active connections for meeting: ' + rtms_stream_id);
       for (const conn of Object.values(connections)) {
         if (conn && typeof conn.close === 'function') {
           conn.close();
         }
       }
-      activeConnections.delete(meeting_uuid);
+      activeConnections.delete(rtms_stream_id);
     }
 
-    console.log('Starting media conversion for meeting: ' + meeting_uuid);
-    await convertMeetingMedia(meeting_uuid); // Old method (gap-filled, converts individually)
-    console.log('Starting audio-video multiplexing for meeting: ' + meeting_uuid);
-    await muxFirstAudioVideo(meeting_uuid); // Mux the old conversions
+    console.log('Starting media conversion for stream: ' + rtms_stream_id);
+    await convertMeetingMedia(rtms_stream_id); // Old method (gap-filled, converts individually)
+    console.log('Starting audio-video multiplexing for meeting: ' + rtms_stream_id);
+    await muxFirstAudioVideo(rtms_stream_id); // Mux the old conversions
 
     // Generate meeting summary using OpenRouter
     (async () => {
-      const safeMeetingUuid = sanitizeFileName(meeting_uuid);
-      console.log('Starting summary generation for meeting: ' + meeting_uuid);
+      const safeStreamID= sanitizeFileName(rtms_stream_id);
+      console.log('Starting summary generation for stream: ' + rtms_stream_id);
       try {
         const promptTemplate = fs.readFileSync('summary_prompt.md', 'utf-8');
-        const eventsLog = fs.existsSync(`recordings/${safeMeetingUuid}/events.log`) ? fs.readFileSync(`recordings/${safeMeetingUuid}/events.log`, 'utf-8') : '';
-        const transcriptVtt = fs.existsSync(`recordings/${safeMeetingUuid}/transcript.vtt`) ? fs.readFileSync(`recordings/${safeMeetingUuid}/transcript.vtt`, 'utf-8') : '';
+        const eventsLog = fs.existsSync(`recordings/${safeStreamID}/events.log`) ? fs.readFileSync(`recordings/${safeStreamID}/events.log`, 'utf-8') : '';
+        const transcriptVtt = fs.existsSync(`recordings/${safeStreamID}/transcript.vtt`) ? fs.readFileSync(`recordings/${safeStreamID}/transcript.vtt`, 'utf-8') : '';
 
         // Read screen share images and convert to base64
-        const processedDir = path.join('recordings', safeMeetingUuid, 'processed', 'jpg');
+        const processedDir = path.join('recordings', safeStreamID, 'processed', 'jpg');
         let imageBase64Array = [];
         if (fs.existsSync(processedDir)) {
           const imageFiles = fs.readdirSync(processedDir).filter(file => file.endsWith('.jpg'));
@@ -164,16 +162,17 @@ app.post(WEBHOOK_PATH, async (req, res) => {
           .replace(/\{\{raw_transcript\}\}/g, transcriptVtt)
           .replace(/\{\{meeting_events\}\}/g, eventsLog)
           .replace(/\{\{meeting_uuid\}\}/g, meeting_uuid)
+          .replace(/\{\{stream_id\}\}/g, rtms_stream_id)
           .replace(/\{\{TODAYDATE\}\}/g, todayDate);
 
         const summary = await chatWithOpenRouter(filledPrompt, undefined, imageBase64Array);
         fs.mkdirSync('meeting_summary', { recursive: true });
-        fs.writeFileSync(`meeting_summary/${safeMeetingUuid}.md`, summary);
-        console.log(`✅ Summary generated and saved for meeting ${meeting_uuid} at meeting_summary/${safeMeetingUuid}.md`);
+        fs.writeFileSync(`meeting_summary/${safeStreamID}.md`, summary);
+        console.log(`✅ Summary generated and saved for stream ${rtms_stream_id} at meeting_summary/${safeStreamID}.md`);
 
         // Generate PDF from the unique screen share images
-        console.log('Generating PDF from screen share images for meeting: ' + meeting_uuid);
-        await generatePDFAndText(meeting_uuid);
+        console.log('Generating PDF from screen share images for stream: ' + rtms_stream_id);
+        await generatePDFAndText(rtms_stream_id);
       } catch (error) {
         console.error('❌ Error generating summary:', error.message);
       }

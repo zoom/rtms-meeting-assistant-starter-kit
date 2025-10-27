@@ -4,6 +4,7 @@ import path from 'path';
 import sharp from 'sharp';
 import pixelmatch from 'pixelmatch';
 import PDFDocument from 'pdfkit';
+import { sanitizeFileName } from './tool.js';
 
 // Session state: Map<meetingUuid, { uniqueFrameCounter: number, lastAcceptedBuffer: Buffer, uniqueFrames: Array<{filePath: string, timestamp: number}> }>
 const meetingSessions = new Map();
@@ -16,8 +17,8 @@ async function handleShareData(shareData, user_id, timestamp, meetingUuid) {
 
     let buffer = Buffer.from(shareData, 'base64');
 
-    // Sanitize meetingUuid for safe folder names (preserve + character as it's valid)
-    const safeMeetingUuid = meetingUuid.toString().replace(/[<>:"\/\\|?*=\s]/g, '_') || 'unknown';
+    // Sanitize meetingUuid for safe folder names using centralized function
+    const safeMeetingUuid = sanitizeFileName(meetingUuid.toString()) || 'unknown';
 
     // Initialize session state if not exists
     if (!meetingSessions.has(meetingUuid)) {
@@ -128,7 +129,7 @@ async function generatePDFAndText(meetingUuid) {
     }
 
     // Sanitize meetingUuid for safe folder names (preserve + character as it's valid)
-    const safeMeetingUuid = meetingUuid.toString().replace(/[<>:"\/\\|?*=\s]/g, '_') || 'unknown';
+    const safeMeetingUuid = sanitizeFileName(meetingUuid.toString()) || 'unknown';
 
     console.log(`Generating PDF for meeting ${safeMeetingUuid} with ${session.uniqueFrames.length} frames`);
 
