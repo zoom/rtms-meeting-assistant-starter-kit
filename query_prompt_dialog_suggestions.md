@@ -7,6 +7,7 @@ Provide 4 actionable conversation directions that would most benefit this meetin
 - Build on the current discussion context
 - Address gaps or opportunities you've identified
 - Promote productive meeting outcomes
+- If there is not enough data yet, don't randomly propose topics, guide the user to provide more context
 
 ## Guidelines
 - **Analyze the full conversation flow** - understand what's been discussed and what's missing

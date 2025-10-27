@@ -279,13 +279,13 @@ export async function generateRealTimeSummary(transcript, meetingEvents = '', im
       .replace(/\{\{stream_id\}\}/g, streamId)
       .replace(/\{\{TODAYDATE\}\}/g, todayDate);
 
-    console.log('📝 Generating real-time meeting summary...');
+    console.log('📝 Generating real-time stream summary...');
     const response = await chatWithOpenRouter(filledPrompt, undefined, imageBase64Array);
 
     console.log('✅ Real-time summary generated');
     return response;
   } catch (err) {
-    console.error('❌ Error generating real-time summary:', err.message);
+    console.error('❌ Error generating real-time stream summary:', err.message);
     return 'Unable to generate summary at this time. Meeting in progress...';
   }
 }

@@ -121,19 +121,19 @@ async function handleShareData(shareData, user_id, timestamp, meetingUuid) {
     }
 }
 
-async function generatePDFAndText(meetingUuid) {
-    const session = meetingSessions.get(meetingUuid);
+async function generatePDFAndText(streamId) {
+    const session = meetingSessions.get(streamId);
     if (!session || session.uniqueFrames.length === 0) {
-        console.log(`No unique frames for meeting ${meetingUuid}, skipping PDF generation`);
+        console.log(`No unique frames for stream ${streamId}, skipping PDF generation`);
         return;
     }
 
-    // Sanitize meetingUuid for safe folder names (preserve + character as it's valid)
-    const safeMeetingUuid = sanitizeFileName(meetingUuid.toString()) || 'unknown';
+    // Sanitize id for safe folder names (preserve + character as it's valid)
+    const safeStreamId = sanitizeFileName(streamId.toString()) || 'unknown';
 
-    console.log(`Generating PDF for meeting ${safeMeetingUuid} with ${session.uniqueFrames.length} frames`);
+    console.log(`Generating PDF for stream ${safeStreamId} with ${session.uniqueFrames.length} frames`);
 
-    const processedDir = path.resolve('recordings', safeMeetingUuid, 'processed');
+    const processedDir = path.resolve('recordings', safeStreamId, 'processed');
     const pdfPath = path.join(processedDir, 'approved.pdf');
     const txtPath = path.join(processedDir, 'frames.txt');
 
@@ -199,7 +199,7 @@ async function generatePDFAndText(meetingUuid) {
     console.log(`Text file saved to: ${txtPath}`);
 
     // Clean up session
-    meetingSessions.delete(meetingUuid);
+    meetingSessions.delete(streamId);
 }
 
 export { handleShareData, generatePDFAndText };

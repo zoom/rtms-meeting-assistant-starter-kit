@@ -45,7 +45,7 @@ export function saveRawVideo(buffer, userName, timestamp, streamId) {
 
     if (timeDifference > 500) {
         const missingFrames = Math.floor(timeDifference / 40); // assuming 25fps
-        console.log(`🕳️ Gap detected (${timeDifference}ms) in meeting ${streamId}. Filling ${missingFrames} black frames.`);
+        console.log(`🕳️ Gap detected (${timeDifference}ms) in stream ${streamId}. Filling ${missingFrames} black frames.`);
 
         for (let i = 0; i < missingFrames; i++) {
             writeStream.write(blackFrame);

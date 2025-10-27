@@ -43,6 +43,7 @@ Important Considerations:
 Output format:
  <TOPIC>The agenda or topic of the meeting</TOPIC>
     <DATE>{{TODAYDATE}}</DATE>
+    <MEETING_UUID> {{meeting_uuid}}  </MEETING_UUID>
     <STREAM_ID>{{stream_id}}</STREAM_ID>
     <SUMMARY>High-level overview of meeting purpose and outcomes.</SUMMARY>
     <KEY_DECISIONS>Bullet list of decisions/ discussion or conclusion made.</KEY_DECISIONS>

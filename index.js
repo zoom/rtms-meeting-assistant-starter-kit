@@ -109,12 +109,12 @@ app.post(WEBHOOK_PATH, async (req, res) => {
   // Handle RTMS stopped event
   if (event === 'meeting.rtms_stopped') {
     console.log('RTMS Stopped event received');
-    const { rtms_stream_id } = payload;
-
+ 
+    const { meeting_uuid, rtms_stream_id, server_urls } = payload;
     // Close all active WebSocket connections for the given meeting UUID
     if (activeConnections.has(rtms_stream_id)) {
       const connections = activeConnections.get(rtms_stream_id);
-      console.log('Closing active connections for meeting: ' + rtms_stream_id);
+      console.log('Closing active connections for stream: ' + rtms_stream_id);
       for (const conn of Object.values(connections)) {
         if (conn && typeof conn.close === 'function') {
           conn.close();
@@ -125,7 +125,7 @@ app.post(WEBHOOK_PATH, async (req, res) => {
 
     console.log('Starting media conversion for stream: ' + rtms_stream_id);
     await convertMeetingMedia(rtms_stream_id); // Old method (gap-filled, converts individually)
-    console.log('Starting audio-video multiplexing for meeting: ' + rtms_stream_id);
+    console.log('Starting audio-video multiplexing for stream: ' + rtms_stream_id);
     await muxFirstAudioVideo(rtms_stream_id); // Mux the old conversions
 
     // Generate meeting summary using OpenRouter
@@ -196,22 +196,22 @@ function generateSignature(CLIENT_ID, meetingUuid, streamId, CLIENT_SECRET) {
 
 // Function to connect to the signaling WebSocket server
 function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
-  console.log(`Connecting to signaling WebSocket for meeting ${meetingUuid}`);
+  console.log(`Connecting to signaling WebSocket for stream ${streamId}`);
   console.log('Stream ID:', streamId);
   console.log('Server URL:', serverUrl);
 
-  const safeMeetingUuid = sanitizeFileName(meetingUuid);
-  console.log('Sanitized Meeting UUID:', safeMeetingUuid);
+  const safeStreamId = sanitizeFileName(streamId);
+  console.log('Sanitized Meeting UUID:', safeStreamId);
 
   const ws = new WebSocket(serverUrl);
   console.log('WebSocket created successfully');
 
   // Store connection for cleanup later
-  if (!activeConnections.has(meetingUuid)) {
-    activeConnections.set(meetingUuid, {});
+  if (!activeConnections.has(streamId)) {
+    activeConnections.set(streamId, {});
   }
-  activeConnections.get(meetingUuid).signaling = ws;
-  activeConnections.get(meetingUuid).startTime = Date.now();
+  activeConnections.get(streamId).signaling = ws;
+  activeConnections.get(streamId).startTime = Date.now();
   console.log('Signaling connection stored for cleanup');
 
 
@@ -232,7 +232,7 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
   };
 
   ws.on('open', () => {
-    console.log(`Signaling WebSocket connection opened for meeting ${meetingUuid}`);
+    console.log(`Signaling WebSocket connection opened for stream ${streamId}`);
     const signature = generateSignature(
       CLIENT_ID,
       meetingUuid,
@@ -262,7 +262,7 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
       const mediaUrl = msg.media_server?.server_urls?.all;
       if (mediaUrl) {
         // Connect to the media WebSocket server using the media URL
-        connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamId, ws);
+        connectToMediaWebSocket(mediaUrl, meetingUuid, safeStreamId, streamId, ws);
       }
 
       //subscribe to events 
@@ -288,20 +288,20 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
         case 2:
           console.log("Event: Active speaker has changed.");
           const eventData2 = { ...msg.event, event_type: eventTypeNames[msg.event.event_type] };
-          fs.mkdirSync(`recordings/${safeMeetingUuid}`, { recursive: true });
-          fs.appendFileSync(`recordings/${safeMeetingUuid}/events.log`, JSON.stringify({ timestamp: formatVTTTime(Date.now() - activeConnections.get(meetingUuid).startTime), event: eventData2 }) + '\n');
+          fs.mkdirSync(`recordings/${safeStreamId}`, { recursive: true });
+          fs.appendFileSync(`recordings/${safeStreamId}/events.log`, JSON.stringify({ timestamp: formatVTTTime(Date.now() - activeConnections.get(streamId).startTime), event: eventData2 }) + '\n');
           break;
         case 3:
           console.log("Event: Participant joined.");
           const eventData3 = { ...msg.event, event_type: eventTypeNames[msg.event.event_type] };
-          fs.mkdirSync(`recordings/${safeMeetingUuid}`, { recursive: true });
-          fs.appendFileSync(`recordings/${safeMeetingUuid}/events.log`, JSON.stringify({ timestamp: formatVTTTime(Date.now() - activeConnections.get(meetingUuid).startTime), event: eventData3 }) + '\n');
+          fs.mkdirSync(`recordings/${safeStreamId}`, { recursive: true });
+          fs.appendFileSync(`recordings/${safeStreamId}/events.log`, JSON.stringify({ timestamp: formatVTTTime(Date.now() - activeConnections.get(streamId).startTime), event: eventData3 }) + '\n');
           break;
         case 4:
           console.log("Event: Participant left.");
           const eventData4 = { ...msg.event, event_type: eventTypeNames[msg.event.event_type] };
-          fs.mkdirSync(`recordings/${safeMeetingUuid}`, { recursive: true });
-          fs.appendFileSync(`recordings/${safeMeetingUuid}/events.log`, JSON.stringify({ timestamp: formatVTTTime(Date.now() - activeConnections.get(meetingUuid).startTime), event: eventData4 }) + '\n');
+          fs.mkdirSync(`recordings/${safeStreamId}`, { recursive: true });
+          fs.appendFileSync(`recordings/${safeStreamId}/events.log`, JSON.stringify({ timestamp: formatVTTTime(Date.now() - activeConnections.get(streamId).startTime), event: eventData4 }) + '\n');
           break;
         default:
           console.log("Event: Unknown event type.");
@@ -329,7 +329,7 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
           console.log("Stream State: Unknown state.");
       }
 
-      switch (msg.stop_reason) {
+      switch (msg.reason) {
         case 1:
           console.log("Stopped because the host triggered it.");
           break;
@@ -409,7 +409,7 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
           console.log("Session State: Unknown state.");
       }
 
-      switch (msg.stop_reason) {
+      switch (msg.reasone) {
         case 1:
           console.log("Stopped because the host triggered it.");
           break;
@@ -485,21 +485,21 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
 
   ws.on('close', () => {
     console.log('Signaling socket closed');
-    if (activeConnections.has(meetingUuid)) {
-      delete activeConnections.get(meetingUuid).signaling;
+    if (activeConnections.has(streamId)) {
+      delete activeConnections.get(streamId).signaling;
     }
   });
 }
 
 // Function to connect to the media WebSocket server
-function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamId, signalingSocket) {
+function connectToMediaWebSocket(mediaUrl, meetingUuid, safestreamId, streamId, signalingSocket) {
   console.log(`Connecting to media WebSocket at ${mediaUrl}`);
 
   const mediaWs = new WebSocket(mediaUrl, { rejectUnauthorized: false });
 
   // Store connection for cleanup later
-  if (activeConnections.has(meetingUuid)) {
-    activeConnections.get(meetingUuid).media = mediaWs;
+  if (activeConnections.has(streamId)) {
+    activeConnections.get(streamId).media = mediaWs;
   }
 
 
@@ -525,7 +525,7 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
           sample_rate: 1,
           channel: 1,
           codec: 1,
-          data_opt: 1,
+          data_opt: 2,   //AUDIO_MIXED_STREAM = 1,     AUDIO_MULTI_STREAMS = 2,     
           send_rate: 100
         },
         video: {
@@ -582,8 +582,8 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
 
         let { user_id, user_name, data: audioData, timestamp } = msg.content;
         let buffer = Buffer.from(audioData, 'base64');
-        //console.log(`Processing audio data for user ${user_name} (ID: ${user_id}), buffer size: ${buffer.length} bytes`);
-        saveRawAudioAdvance(buffer, meetingUuid, user_id, Date.now()); // Primary method
+        console.log(`Processing audio data for user ${user_name} (ID: ${user_id}), buffer size: ${buffer.length} bytes`);
+        saveRawAudioAdvance(buffer, streamId, user_id, Date.now()); // Primary method
 
       }
       // Handle video data
@@ -592,21 +592,21 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
         let { user_id, user_name, data: videoData, timestamp } = msg.content;
         let buffer = Buffer.from(videoData, 'base64');
         //console.log(`Processing video data for user ${user_name} (ID: ${user_id}), buffer size: ${buffer.length} bytes`);
-        saveRawVideoAdvance(buffer, user_name, timestamp, meetingUuid); // Primary method
+        saveRawVideoAdvance(buffer, user_name, timestamp, streamId); // Primary method
       }
       // Handle sharescreen data
       if (msg.msg_type === 16 && msg.content && msg.content.data) {
         let epochMilliseconds = Date.now();
         let { user_id, user_name, data: imgData, timestamp } = msg.content;
         // Call handleShareData to process and save unique screen share images
-        handleShareData(imgData, user_id, Date.now(), meetingUuid).catch(err => console.error('Error handling share data:', err));
+        handleShareData(imgData, user_id, Date.now(), streamId).catch(err => console.error('Error handling share data:', err));
       }
       // Handle transcript data
       if (msg.msg_type === 17 && msg.content && msg.content.data) {
         let { user_id, user_name, data, timestamp } = msg.content;
         //console.log(`Processing transcript: "${data}" from user ${user_name} (ID: ${user_id})`);
         // Write transcript to VTT file
-        writeTranscriptToVtt(user_name, timestamp / 1000, data, safeMeetingUuid);
+        writeTranscriptToVtt(user_name, timestamp / 1000, data, safestreamId);
 
         // Broadcast transcript to WebSocket clients immediately
         broadcastToWebSocketClients({
@@ -614,10 +614,10 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
           user: user_name,
           text: data,
           timestamp: timestamp
-        }, meetingUuid);
+        }, streamId);
 
         // Schedule AI processing (cached, 15-second intervals)
-        scheduleAIProcessing(meetingUuid, safeMeetingUuid);
+        scheduleAIProcessing(streamId, meetingUuid);
       }
 
       // Handle chat data
@@ -636,8 +636,8 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safeMeetingUuid, streamI
 
   mediaWs.on('close', () => {
     console.log('Media socket closed');
-    if (activeConnections.has(meetingUuid)) {
-      delete activeConnections.get(meetingUuid).media;
+    if (activeConnections.has(streamId)) {
+      delete activeConnections.get(streamId).media;
     }
   });
 }
@@ -861,14 +861,14 @@ app.get('/meeting-topics', (req, res) => {
 });
 
 // WebSocket broadcasting function for real-time updates
-function broadcastToWebSocketClients(message, meetingUuid = null) {
+function broadcastToWebSocketClients(message, streamId = null) {
   // Send message to all connected client WebSockets
   // For now, we'll implement this when we add the client WebSocket server
   console.log('Broadcasting message:', message);
 
-  // If meetingUuid specified, only broadcast to clients connected to that meeting
-  if (meetingUuid && clientWebSocketConnections.has(meetingUuid)) {
-    const clients = clientWebSocketConnections.get(meetingUuid);
+  // If streamId specified, only broadcast to clients connected to that meeting
+  if (streamId && clientWebSocketConnections.has(streamId)) {
+    const clients = clientWebSocketConnections.get(streamId);
     clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         try {
@@ -895,17 +895,19 @@ function broadcastToWebSocketClients(message, meetingUuid = null) {
 }
 
 // AI Processing scheduler with caching (15-second intervals)
-function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
+function scheduleAIProcessing(streamId, meetingUuid) {
   const now = Date.now();
-  const cacheKey = meetingUuid;
+  const cacheKey = streamId;
   const cache = aiCache.get(cacheKey) || {};
 
+   const safeStreamId= sanitizeFileName(streamId);
+  
   // Only process if 15+ seconds since last update
   if (!cache.lastUpdated || (now - cache.lastUpdated) > 15000) {
-    console.log('🧠 Starting AI processing for meeting:', meetingUuid);
+    console.log('🧠 Starting AI processing for stream:', streamId);
 
     // Read full VTT transcript for AI context
-    const vttPath = `recordings/${safeMeetingUuid}/transcript.vtt`;
+    const vttPath = `recordings/${safeStreamId}/transcript.vtt`;
     if (!fs.existsSync(vttPath)) {
       console.log('VTT transcript not found, skipping AI processing');
       return;
@@ -914,10 +916,10 @@ function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
     const currentVTT = fs.readFileSync(vttPath, 'utf-8');
 
     // Read events log and screen share images
-    const eventsLog = fs.existsSync(`recordings/${safeMeetingUuid}/events.log`) ? fs.readFileSync(`recordings/${safeMeetingUuid}/events.log`, 'utf-8') : '';
+    const eventsLog = fs.existsSync(`recordings/${safeStreamId}/events.log`) ? fs.readFileSync(`recordings/${safeStreamId}/events.log`, 'utf-8') : '';
 
     // Read screen share images and convert to base64
-    const processedDir = path.join('recordings', safeMeetingUuid, 'processed', 'jpg');
+    const processedDir = path.join('recordings', safeStreamId, 'processed', 'jpg');
     let imageBase64Array = [];
     if (fs.existsSync(processedDir)) {
       const imageFiles = fs.readdirSync(processedDir).filter(file => file.endsWith('.jpg'));
@@ -938,7 +940,7 @@ function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
     Promise.all([
       generateDialogSuggestions(currentVTT),
       analyzeSentiment(currentVTT),
-      generateRealTimeSummary(currentVTT, eventsLog, imageBase64Array, meetingUuid)
+      generateRealTimeSummary(currentVTT, eventsLog, imageBase64Array, streamId,meetingUuid)
     ]).then(([dialogSuggestions, sentimentAnalysis, realTimeSummary]) => {
       // Update cache
       cache.dialog = dialogSuggestions;
@@ -953,17 +955,17 @@ function scheduleAIProcessing(meetingUuid, safeMeetingUuid) {
       broadcastToWebSocketClients({
         type: 'ai_dialog',
         suggestions: dialogSuggestions
-      }, meetingUuid);
+      }, streamId);
 
       broadcastToWebSocketClients({
         type: 'sentiment',
         analysis: sentimentAnalysis
-      }, meetingUuid);
+      }, streamId);
 
       broadcastToWebSocketClients({
         type: 'meeting_summary',
         summary: realTimeSummary
-      }, meetingUuid);
+      }, streamId);
 
     }).catch(err => {
       console.error('❌ AI processing error:', err);
