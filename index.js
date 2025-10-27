@@ -102,8 +102,10 @@ app.post(WEBHOOK_PATH, async (req, res) => {
   if (event === 'meeting.rtms_started') {
     console.log('RTMS Started event received');
     const { meeting_uuid, rtms_stream_id, server_urls } = payload;
+    // Store mapping for cleanup (temporary until stopped events include stream_id)
+    meetingUuidToStreamId.set(meeting_uuid, rtms_stream_id);
     // Initiate connection to the signaling WebSocket server
-    connectToSignalingWebSocket(meeting_uuid, rtms_stream_id, server_urls);
+    connectToSignalingWebSocket(rtms_stream_id, rtms_stream_id, server_urls);
   }
 
   // Handle RTMS stopped event
