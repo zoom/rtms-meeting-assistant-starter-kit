@@ -7,9 +7,9 @@ import { sanitizeFileName } from './tool.js';
 const runFFmpegCommand = promisify(exec);
 
 // Asynchronous function to mux the first audio and video files
-export async function muxFirstAudioVideo(meetingUuid) {
-  const safeMeetingUuid = sanitizeFileName(meetingUuid);
-  const folderPath = path.join('recordings', safeMeetingUuid);
+export async function muxFirstAudioVideo(streamId) {
+  const safeStreamId = sanitizeFileName(streamId);
+  const folderPath = path.join('recordings', safeStreamId);
 
   if (!fs.existsSync(folderPath)) {
     console.error(`❌ Meeting folder does not exist: ${folderPath}`);

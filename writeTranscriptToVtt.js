@@ -34,11 +34,11 @@ function formatSrtTimestamp(ms) {
 }
 
 // ✨ Accept meetingFolder as extra parameter
-export function writeTranscriptToVtt(user_name, timestamp, data, meetingUuid) {
+export function writeTranscriptToVtt(user_name, timestamp, data, streamId) {
 
-  const safeMeetingUuid = sanitizeFileName(meetingUuid);
+  const safeStreamId = sanitizeFileName(streamId);
 
-  const meetingFolder= path.join('recordings', safeMeetingUuid);
+  const meetingFolder= path.join('recordings', safeStreamId);
   if (!fs.existsSync(meetingFolder)) {
     fs.mkdirSync(meetingFolder, { recursive: true });
   }

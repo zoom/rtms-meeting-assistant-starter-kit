@@ -7,10 +7,10 @@ import { sanitizeFileName } from './tool.js';
 const runFFmpegCommand = promisify(exec);
 
 // Asynchronous function to convert meeting media files
-export async function convertMeetingMedia(meetingUuid) {
-  const safeMeetingUuid = sanitizeFileName(meetingUuid);
+export async function convertMeetingMedia(streamId) {
+  const safeStreamId = sanitizeFileName(streamId);
 
-  const folderPath = path.join('recordings', safeMeetingUuid);
+  const folderPath = path.join('recordings', safeStreamId);
 
   if (!fs.existsSync(folderPath)) {
     console.error(`❌ Meeting folder does not exist: ${folderPath}`);
@@ -49,5 +49,5 @@ export async function convertMeetingMedia(meetingUuid) {
     }
   }
 
-  console.log(`🎯 All media converted for stream ${meetingUuid}`);
+  console.log(`🎯 All media converted for stream ${streamId}`);
 }

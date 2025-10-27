@@ -17,9 +17,9 @@ const videoWriteStreams = new Map();
 // Define a map to store the last timestamps for each meeting
 const lastTimestamps = new Map();
 
-export function saveRawVideo(buffer, userName, timestamp, meetingUuid) {
-    const safeMeetingUuid = sanitizeFileName(meetingUuid);
-    const outputDir = path.join('recordings', safeMeetingUuid);
+export function saveRawVideo(buffer, userName, timestamp, streamId) {
+    const safeStreamId = sanitizeFileName(streamId);
+    const outputDir = path.join('recordings', safeStreamId);
 
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
@@ -34,18 +34,18 @@ export function saveRawVideo(buffer, userName, timestamp, meetingUuid) {
     }
 
     // Write SPS/PPS headers once per meeting stream
-    if (!spsWrittenMap.get(safeMeetingUuid)) {
+    if (!spsWrittenMap.get(safeStreamId)) {
         writeStream.write(spsHeader);
-        spsWrittenMap.set(safeMeetingUuid, true);
+        spsWrittenMap.set(safeStreamId, true);
     }
 
     // Step 3: Gap detection (global for the combined meeting video)
-    const lastTimestamp = lastTimestamps.get(safeMeetingUuid) || timestamp;
+    const lastTimestamp = lastTimestamps.get(safeStreamId) || timestamp;
     const timeDifference = timestamp - lastTimestamp;
 
     if (timeDifference > 500) {
         const missingFrames = Math.floor(timeDifference / 40); // assuming 25fps
-        console.log(`🕳️ Gap detected (${timeDifference}ms) in meeting ${meetingUuid}. Filling ${missingFrames} black frames.`);
+        console.log(`🕳️ Gap detected (${timeDifference}ms) in meeting ${streamId}. Filling ${missingFrames} black frames.`);
 
         for (let i = 0; i < missingFrames; i++) {
             writeStream.write(blackFrame);
@@ -54,5 +54,5 @@ export function saveRawVideo(buffer, userName, timestamp, meetingUuid) {
 
     // Step 4: Write frame + update timestamp
     writeStream.write(buffer);
-    lastTimestamps.set(safeMeetingUuid, timestamp);
+    lastTimestamps.set(safeStreamId, timestamp);
 }

@@ -13,12 +13,12 @@ function generateSilentAudioFrame(sampleRate, durationMs) {
     return Buffer.alloc(samples * 2, 0); // 16-bit PCM, silence (mono)
 }
 
-export function saveRawAudio(chunk, meetingUuid, user_id, timestamp) {
+export function saveRawAudio(chunk, streamId, user_id, timestamp) {
 
-    const safeMeetingUuid = sanitizeFileName(meetingUuid);
+    const safeStreamId = sanitizeFileName(streamId);
 
-    // Build path: recordings/{meetingUuid}/{userId}.raw
-    const filePath = `recordings/${safeMeetingUuid}/${user_id}.raw`;
+    // Build path: recordings/{streamId}/{userId}.raw
+    const filePath = `recordings/${safeStreamId}/${user_id}.raw`;
 
     // If the folder doesn't exist yet, create it
     const dir = path.dirname(filePath);
