@@ -28,6 +28,7 @@ In addition to the transcript and events, screen share images have been captured
 
 Current Date: {{TODAYDATE}}
 Meeting UUID: {{meeting_uuid}}
+Stream ID: {{stream_id}}
 
 Objectives:  Act as a professional meeting note-taker. Your goal is to condense the transcript into a structured summary that highlights the key points, decisions, and action items, while removing filler conversation. The summary must be concise, neutral in tone, and easy to scan.
 
@@ -41,8 +42,8 @@ Important Considerations:
 
 Output format:
  <TOPIC>The agenda or topic of the meeting</TOPIC>
-    <DATE>Datetime as provided, if it is missing, use the datetime from your server,and set the timezone to GTM +0</DATE>
-    <MEETING_UUID>provide the meeting uuid here</MEETING_UUID>
+    <DATE>{{TODAYDATE}}</DATE>
+    <STREAM_ID>{{stream_id}}</STREAM_ID>
     <SUMMARY>High-level overview of meeting purpose and outcomes.</SUMMARY>
     <KEY_DECISIONS>Bullet list of decisions/ discussion or conclusion made.</KEY_DECISIONS>
     <ACTION_ITEMS>Each action item with owner + due date (if mentioned).</ACTION_ITEMS>

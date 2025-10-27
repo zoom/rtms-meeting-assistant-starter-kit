@@ -22,24 +22,24 @@ Your output **must** follow this exact structure:
         (Provide your written answer here. Use bullet points for clarity.)
     </answer>
 
-    <meeting_uuids>
-        <meeting>
-            <meeting_uuid>kL9bP2yH7jR4aX6mS1wF8t==</meeting_uuid>
+    <stream_ids>
+        <stream>
+            <stream_id>kL9bP2yH7jR4aX6mS1wF8t==</stream_id>
             <time>2025-01-01T00:00:00Z</time>
-        </meeting>
-        <meeting>
-            <meeting_uuid>Z0nC4fV8gM2uJ6pE1qK5hT==</meeting_uuid>
+        </stream>
+        <stream>
+            <stream_id>Z0nC4fV8gM2uJ6pE1qK5hT==</stream_id>
             <time>2025-01-01T00:00:00Z</time>
-        </meeting>
+        </stream>
         ...
-    </meeting_uuids>
+    </stream_ids>
 </response>
 
 Formatting rules:
 - Do not include any text outside of <response>...</response>.
-- Every meeting UUID must be wrapped in its own <meeting> block with both <meeting_uuid> and <time>. Include these tag, important!
+- Every stream_id must be wrapped in its own <stream> block with both <stream_id> and <time>. Include these tag, important!
 - Do not indent with inconsistent spaces or markdown bullets inside XML.
-- If no meetings are found, still return an empty <meeting_uuids></meeting_uuids> tag.
+- If no meetings are found, still return an empty <stream_ids></stream_ids> tag.
 - Do not hallucinate if there are no meetings and meeting summary found
 
 Return the full XML exactly in this structure — no markdown, no commentary, and no explanations.

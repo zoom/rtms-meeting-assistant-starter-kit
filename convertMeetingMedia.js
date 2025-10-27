@@ -53,5 +53,5 @@ export async function convertMeetingMedia(meetingUuid) {
     }
   }
 
-  console.log(`🎯 All media converted for meeting ${meetingUuid}`);
+  console.log(`🎯 All media converted for stream ${meetingUuid}`);
 }

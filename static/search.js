@@ -63,41 +63,38 @@ document.addEventListener('DOMContentLoaded', () => {
         const result = await response.text();
         results.innerHTML = `<div style="white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word;">${result}</div>`;
 
-        // Extract meeting UUIDs from the result using regex
-        const meetingUuidRegex = /<meeting_uuid>([^<]+)<\/meeting_uuid>/gi;
-        const foundUuids = [];
+        // Extract stream IDs from the result using regex
+        const streamIdRegex = /<STREAM_ID>([^<]+)<\/STREAM_ID>/gi;
+        const foundStreamIds = [];
         let match;
-        while ((match = meetingUuidRegex.exec(result)) !== null) {
-          foundUuids.push(match[1].trim());
+        while ((match = streamIdRegex.exec(result)) !== null) {
+          foundStreamIds.push(match[1].trim());
         }
 
-        // Populate dropdown with topics if UUIDs found
-        if (foundUuids.length > 0) {
+        // Populate dropdown with topics if stream IDs found
+        if (foundStreamIds.length > 0) {
           // Clear existing options except the first
           while (meetingUuidSelect.children.length > 1) {
             meetingUuidSelect.removeChild(meetingUuidSelect.lastChild);
           }
-          foundUuids.forEach(uuid => {
-            // Sanitize UUID to match topic map format (replace slashes with underscores)
-            const sanitizedUuid = uuid.replace(/[<>:"\/\\|?*=\s]/g, '_');
+          foundStreamIds.forEach(streamId => {
+            // Find topic for this stream ID (topicToUuidMap maps topic -> stream_id)
+            const topic = Object.keys(topicToUuidMap).find(t => topicToUuidMap[t] === streamId) || '';
 
-            // Find topic for this UUID (topicToUuidMap maps topic -> sanitized_uuid)
-            const topic = Object.keys(topicToUuidMap).find(t => topicToUuidMap[t] === sanitizedUuid) || '';
-
-            // Show topic + short UUID for identification
-            const shortUuid = uuid.replace(/[/]/g, '').substring(0, 8);
-            const displayText = topic ? `${topic} (${shortUuid}...)` : `Meeting ${shortUuid}...`;
+            // Show topic + short stream ID for identification
+            const shortStreamId = streamId.replace(/[/]/g, '').substring(0, 8);
+            const displayText = topic ? `${topic} (${shortStreamId}...)` : `Meeting ${shortStreamId}...`;
 
             const option = document.createElement('option');
-            option.value = uuid; // Store original UUID as value
+            option.value = streamId; // Store stream ID as value
             option.textContent = displayText; // Display topic text
             meetingUuidSelect.appendChild(option);
           });
           // Auto-load first meeting
-          meetingUuidSelect.value = foundUuids[0];
-          loadMeetingContent(foundUuids[0]);
+          meetingUuidSelect.value = foundStreamIds[0];
+          loadMeetingContent(foundStreamIds[0]);
         } else {
-          console.log('No meeting UUIDs found in response');
+          console.log('No stream IDs found in response');
         }
       } else {
         results.textContent = 'Error: ' + response.statusText;
