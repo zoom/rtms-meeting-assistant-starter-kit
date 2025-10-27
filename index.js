@@ -3,19 +3,29 @@ import crypto from 'crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 import fs from 'fs';
-import helmet from 'helmet';
+import helmet from 'helmet'; //used for CSP and security headers
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 
+//used for saving audio and video frm RTMS stream
 import { saveRawAudio as saveRawAudioAdvance } from './saveRawAudioAdvance.js';
 import { saveRawVideo as saveRawVideoAdvance } from './saveRawVideoAdvance.js';
+
+//used for saving transcript
 import { writeTranscriptToVtt } from './writeTranscriptToVtt.js';
+
+//used for saving screenshare 
+import { handleShareData, generatePDFAndText } from './saveSharescreen.js';
+
+//used for communication with openrouter
 import { chatWithOpenRouter,chatWithOpenRouterFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting } from './chatWithOpenrouter.js';
+
+//video process with ffmpeg post meeting
 import { convertMeetingMedia } from './convertMeetingMedia.js';
 import { muxFirstAudioVideo } from './muxFirstAudioVideo.js';
-import { handleShareData, generatePDFAndText } from './saveSharescreen.js';
+
 
 
 // Load environment variables from a .env file
