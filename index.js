@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import helmet from 'helmet';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -40,6 +41,21 @@ const WEBHOOK_PATH = process.env.WEBHOOK_PATH || '/webhook';
 // Middleware to parse JSON and URL-encoded bodies
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Security headers middleware
+app.use((req, res, next) => {
+  res.setHeader(
+    "Strict-Transport-Security",
+    "max-age=31536000; includeSubDomains"
+  );
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none';"
+  );
+  next();
+});
 
 // Serve static files (HTML, JS, etc.)
 app.use(express.static(__dirname));
