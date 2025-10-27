@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { sanitizeFileName } from './tool.js';
 
 let srtIndex = 1;
 let startTimestamp = null; // ✅ will hold first transcript timestamp
@@ -80,9 +81,3 @@ export function writeTranscriptToVtt(user_name, timestamp, data, meetingUuid) {
   fs.appendFileSync(txtFilePath, txtLine);
   //console.log(`📄 TXT saved to ${txtFilePath}`);
 }
-
-
-function sanitizeFileName(name) {
-    return name.replace(/[<>:"\/\\|?*=\s]/g, '_');
-  }
-  

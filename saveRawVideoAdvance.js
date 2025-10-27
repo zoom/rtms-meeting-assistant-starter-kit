@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-
-
+import { sanitizeFileName } from './tool.js';
 
 const spsWrittenMap = new Map();
 const spsHeader = fs.readFileSync('sps_pps_keyframe.h264');
@@ -17,10 +16,6 @@ const videoWriteStreams = new Map();
 
 // Define a map to store the last timestamps for each meeting
 const lastTimestamps = new Map();
-
-function sanitizeFileName(name) {
-    return name.replace(/[<>:"\/\\|?*=\s]/g, '_');
-}
 
 export function saveRawVideo(buffer, userName, timestamp, meetingUuid) {
     const safeMeetingUuid = sanitizeFileName(meetingUuid);

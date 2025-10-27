@@ -26,6 +26,8 @@ import { chatWithOpenRouter,chatWithOpenRouterFast, generateDialogSuggestions, a
 import { convertMeetingMedia } from './convertMeetingMedia.js';
 import { muxFirstAudioVideo } from './muxFirstAudioVideo.js';
 
+import { sanitizeFileName } from './tool.js';
+
 
 
 // Load environment variables from a .env file
@@ -36,11 +38,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = process.env.PORT || 3000;
 const execAsync = promisify(exec);
-
-// Function to sanitize filename to avoid invalid characters
-function sanitizeFileName(name) {
-  return name.replace(/[<>:"\/\\|?*=\s]/g, '_');
-}
 
 const ZOOM_SECRET_TOKEN = process.env.ZOOM_SECRET_TOKEN;
 const CLIENT_ID = process.env.ZOOM_CLIENT_ID;

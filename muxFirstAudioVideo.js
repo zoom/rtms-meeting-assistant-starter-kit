@@ -2,13 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { sanitizeFileName } from './tool.js';
 
 const runFFmpegCommand = promisify(exec);
-
-// Utility function to sanitize file names
-function sanitizeFileName(name) {
-  return name.replace(/[<>:"\/\\|?*=\s]/g, '_');
-}
 
 // Asynchronous function to mux the first audio and video files
 export async function muxFirstAudioVideo(meetingUuid) {

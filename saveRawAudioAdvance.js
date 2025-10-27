@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { sanitizeFileName } from './tool.js';
 
 // Cache for open write streams
 const writeStreams = new Map();
@@ -10,10 +11,6 @@ const lastAudioTimestamps = new Map();
 function generateSilentAudioFrame(sampleRate, durationMs) {
     const samples = (sampleRate * durationMs) / 1000;
     return Buffer.alloc(samples * 2, 0); // 16-bit PCM, silence (mono)
-}
-
-function sanitizeFileName(name) {
-    return name.replace(/[<>:"/\\|?*=\s]/g, '_');
 }
 
 export function saveRawAudio(chunk, meetingUuid, user_id, timestamp) {
