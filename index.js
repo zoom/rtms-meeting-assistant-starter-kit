@@ -525,7 +525,7 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safestreamId, streamId, 
           sample_rate: 1,
           channel: 1,
           codec: 1,
-          data_opt: 2,   //AUDIO_MIXED_STREAM = 1,     AUDIO_MULTI_STREAMS = 2,     
+          data_opt: 1,   //AUDIO_MIXED_STREAM = 1,     AUDIO_MULTI_STREAMS = 2,     
           send_rate: 100
         },
         video: {
