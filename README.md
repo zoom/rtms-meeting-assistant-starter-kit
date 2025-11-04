@@ -1,6 +1,6 @@
 # RTMS Meeting Assistant Starter Kit
 
-This starter kit provides a quick way to get starter on Zoom RTMS + Zoom Apps, using transcription, summarization, and chat functionality using OpenRouter.
+This starter kit provides a quick way to get started on Zoom RTMS + Zoom Apps, using transcription, summarization, and chat functionality with support for multiple AI providers including OpenRouter (Paid), Gemma, Qwen, and DeepSeek.
 
 ### How It Works
 
@@ -20,16 +20,20 @@ project/
 ├── sps_pps_keyframe.h264       # H.264 video headers for stream compatibility
 ├── index.js                    # Main RTMS application server & recording logic
 ├── muxFirstAudioVideo.js       # Initial audio/video muxing for combined streams
-├── saveRawAudioAdvance.js      # Real-time audio stream saving 
+├── saveRawAudioAdvance.js      # Real-time audio stream saving
 ├── saveRawVideoAdvance.js      # Real-time video stream saving
 ├── writeTranscriptToVtt.js     # Real-time transcript writing in multiple formats
 ├── convertMeetingMedia.js      # FFmpeg conversion utilities
-├── chatWithOpenrouter.js       # LLM API integration for chat & summarization
+├── chatWithOpenrouter.js       # OpenRouter LLM API integration for chat & summarization
+├── chatWithGemma.js            # Google Gemma LLM API integration (free model)
+├── chatWithQwen.js             # Alibaba Qwen LLM API integration (free model)
+├── chatWithDeepSeek.js         # DeepSeek LLM API integration (free model)
 ├── saveSharescreen.js          # Real-time screenshare capture, frame deduplication, and PDF generation
 ├── tool.js                     # Utility functions including filename sanitization
 └── static/
     ├── search.html             # Web interface for search/video/summaries
-    └── search.js               # Frontend logic for search interface
+    ├── search.js               # Frontend logic for search interface
+    └── d3.v7.min.js            # D3.js library for data visualization and interactive charts
 recordings/                     # Generated meeting data storage
     └── {streamId}/          # Per-meeting directory
         ├── transcript.(vtt|srt|txt)  # Real-time transcripts
@@ -39,37 +43,52 @@ recordings/                     # Generated meeting data storage
         ├── final_output.mp4     # Final muxed video for playback
         └── processed/           # Sharescreen processing directory
             ├── jpg/             # Individual captured JPEG frames
-            └── approved.pdf     # Compiled sharescreen PDF
+            ├── approved.pdf     # Compiled sharescreen PDF with deduplicated frames
+            └── frames.txt       # Timestamp log of when screenshare frames appear in the meeting
 meeting_summary/                # LLM-generated meeting summaries
     └── {streamId}.md        # Formatted meeting summary with structured content
 ```
 
 ## Setup Instructions
 
-### OpenRouter API Key
+### AI Provider Configuration
 
-To enable chat and AI-powered features, you will need an API key from OpenRouter.
+The application supports multiple AI providers. Choose one based on your needs:
+
+#### Option 1: OpenRouter 
+For paid AI models with high reliability and XML tagging support:
 
 1. Visit [OpenRouter](https://openrouter.ai/) and sign up for an account.
 2. Generate an API key from your OpenRouter dashboard.
-3. Create a `.env` file in the project root and add your API key and model:
-   ```
-   OPENROUTER_API_KEY=your_openrouter_api_key_here
-   OPENROUTER_MODEL=google/gemini-2.5-pro
-   OPENROUTER_REASONING_ENABLED="true"
+3. Configure your `.env` file with OpenRouter settings.
 
-   # Zoom configuration
-   ZOOM_CLIENT_ID=your_zoom_client_id_here
-   ZOOM_CLIENT_SECRET=your_zoom_client_secret_here
-   ZOOM_SECRET_TOKEN=your_zoom_secret_token_here
+#### Option 2: Free Models (Gemma, Qwen, DeepSeek)
+For cost-free AI models (may have rate limits and **no image support**):
 
-   # Server configuration
-   PORT=3000
-   WEBHOOK_PATH="/webhook"
-   WEBSOCKET_URL="rtms.asdc.cc/client-websocket"
+- **Gemma**: Google's lightweight model, good for basic tasks
+- **Qwen**: Alibaba's model with good multilingual support
+- **DeepSeek**: Advanced reasoning capabilities with competitive performance
+
+⚠️ **Important**: Free models have several limitations:
+- **No image support**: Features like screenshare analysis and visual meeting summaries will not work
+- **Context limits**: Searching through all .md summary files may fail due to token limits
+- **Rate limiting**: May return 429 errors when called too frequently during realtime AI analysis
+
+### Environment Configuration
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
    ```
-4. Use a modern LLM that supports XML tagging, such as Google Gemini 2.5 Pro, as specified in the .env.example file. The `OPENROUTER_REASONING_ENABLED` setting controls whether the AI uses its reasoning capabilities for processing meeting data, which can improve structured outputs and analysis.
-5. Make sure to keep your API key secure and never commit it to version control.
+
+2. Edit the `.env` file and update the values according to your setup:
+
+**Configuration Notes:**
+- Use modern LLMs that support XML tagging (like Google Gemini 2.5 Pro) for best results
+- `AI_PROCESSING_INTERVAL_MS`: Controls how frequently AI analyzes meeting data (default: 30 seconds)
+- `AI_FUNCTION_STAGGER_MS`: Prevents API clustering by staggering AI function calls (default: 5000ms)
+- Free models (gemma, qwen, deepseek) may have rate limits but don't require API keys
+- Keep your API keys secure and never commit them to version control
 
 ### Zoom Marketplace Configuration
 
@@ -83,14 +102,28 @@ Ensure your application is accessible at these endpoints to handle Zoom requests
 ## Features
 
 ### Real-Time Recording
-During active meetings, the application saves transcript, video, and audio data to disk in real time for immediate access and processing.
+During active meetings, the application saves transcript, video, audio, screenshare, and event data to disk in real time for immediate access and processing.
 
 - **Transcripts**: Saved as VTT, SRT, and TXT files in the `recordings/{streamId}` folder with timestamped entries.
 - **Audio**: Raw PCM data is stored per participant in `.raw` files within `recordings/{streamId}/{userId}.raw`, with automatic gap filling for silent periods.
 - **Video**: Raw H.264 video is combined into a single file `recordings/{streamId}/combined.h264`, with SPS/PPS headers for playback compatibility and gap filling using black frames.
+- **Screenshare**: Captured as JPEG images in `recordings/{streamId}/processed/jpg/` with deduplication to avoid redundant frames, and compiled into PDF format for easy viewing and analysis.
+- **Events**: Meeting participant activities (join/leave events) logged in `recordings/{streamId}/events.log` with timestamps for attendance tracking and meeting analytics.
+
+
+### Real-Time AI Processing
+During active meetings, the application provides live AI analysis to enhance meeting facilitation and participant engagement. The LLM continuously processes incoming transcripts to generate:
+
+- **Dialog Suggestions**: Strategic conversation directions and facilitation tips to guide meeting discussions effectively
+- **Sentiment Analysis**: Real-time assessment of participant sentiment and emotional indicators from speech patterns
+- **Meeting Summaries**: Live summarization of ongoing discussions with key points and decisions as they emerge
+
+These insights are broadcast via WebSocket to connected Zoom Apps, providing facilitators and participants with immediate AI-powered assistance during the meeting.
 
 ### Post-Meeting Processing
-LLM summary generation from transcripts, event logs, and video/audio muxing operations occur only after the meeting concludes, ensuring comprehensive processing once all data is available. This includes combining raw audio and video streams into a final muxed video file (`recordings/{streamId}/final_output.mp4`) for archival and playback.
+After meetings conclude, comprehensive AI-powered processing generates detailed meeting summaries and finalizes media files. The LLM analyzes transcripts, screenshare images, and participant event logs to create structured summaries with key decisions, action items, and entity detection. These summaries are saved as formatted Markdown files in `meeting_summary/{streamId}.md` for easy access and search.
+
+Additionally, raw audio and video streams are combined into a final muxed video file (`recordings/{streamId}/final_output.mp4`) for archival and playback, ensuring all meeting content is properly processed and accessible.
 
 ### Data Storage and Reuse
 All meeting data is stored in a structured format within the `recordings/{streamId}/` directory, enabling users to leverage this rich dataset for custom AI training and analysis:
@@ -101,10 +134,17 @@ All meeting data is stored in a structured format within the `recordings/{stream
 - **Sharescreen Media**: Captured screenshots  (in `/processed`) saved as JPEG files, along with generated PDF compilations, perfect for document analysis and visual content training
 - **Event Logs**: Structured logs of meeting events (participant join/leave) that can be used for analyzing meeting participation patterns
 
-This comprehensive media library allows developers to fine-tune AI models on their own meeting data, improving accuracy for industry-specific terminology, speaker recognition, and content analysis.
+This comprehensive media library allows developers to fine-tune AI models on your own meeting data, improving accuracy for industry-specific terminology, speaker recognition, and content analysis.
 
 ## Customization
 
+The application supports extensive customization of AI behavior through multiple configuration options:
+
+### AI Processing Configuration
+- `AI_PROCESSING_INTERVAL_MS`: Controls how frequently AI analyzes meeting data during active sessions (default: 30000ms = 30 seconds)
+- `AI_FUNCTION_STAGGER_MS`: Prevents API clustering by adding delays between AI function calls (default: 5000ms = 5 seconds)
+
+### Prompt File Customization
 The application supports customization of AI behavior through prompt files:
 
 - `summary_prompt.md`: Defines how meeting summaries are generated, including structured output for key decisions, action items, and entity detection. Users can modify this file to adjust the summarization logic without altering code.
@@ -113,20 +153,16 @@ The application supports customization of AI behavior through prompt files:
 - `query_prompt_dialog_suggestions.md`: Enables the AI to generate strategic conversation directions for meeting facilitation, providing 4 actionable suggestions for guiding discussions like RPG quest options.
 - `query_prompt_sentiment_analysis.md`: Performs detailed sentiment analysis of all meeting participants, scoring each user's positive, neutral, and negative sentiment indicators from their speech patterns.
 
-These prompt files enable easy customization of AI behavior for different industries or user preferences without requiring code changes or recompilation.
+These configuration options and prompt files enable easy customization of AI behavior for different industries or user preferences without requiring code changes or recompilation.
 
-## Usage
+## Frontend Zoom Apps
 
-The application provides a web interface (`/search`) for interacting with meeting data:
+The application provides a comprehensive web interface accessible at `/search` (served by `static/search.html` and powered by `static/search.js`) for interacting with meeting data:
 
+- **Search and Playback**: Select meetings by stream id to search and display meeting summaries (from `meeting_summary/{streamId}.md` files) alongside synchronized video playback (from `recordings/{streamId}/final_output.mp4`), with clickable transcript lines that jump to corresponding video timestamps.
+- **View All Summaries**: Browse and display all formatted meeting summaries from `meeting_summary/{streamId}.md` files stored in the system.
+- **Real-time Dashboard**: Use natural language to interact with current meetings by processing cumulative transcript in `recordings/{streamId}/transcript.vtt` file to generate AI dialog suggestions, sentiment analysis and real-time summarization.
 
-- **Search and Playback**: Select meetings by stream id to view synchronized video and transcript playback, with clickable transcript lines that jump to corresponding video timestamps.
-- **View All Summaries**: Browse and display formatted meeting summaries stored in the system.
-- **Real-time Dashboard**: Use natural language to interact with current meetings, display AI dialog suggestions, sentiment analysis and real-time summarization.
-
-After setting up the API key and Zoom URL, you can run the application as per the scripts in `package.json`.
-
-For more details, refer to the code and configuration files in the project.
 
 ## API & Integration
 
@@ -171,5 +207,4 @@ Comprehensive security headers are implemented using Helmet.js middleware to mee
 - API endpoint specifications and rate limiting guidelines
 - Content embedding and iframe restrictions within Zoom clients
 
-Zoom regularly updates their security policies, so please verify your implementation against the most current documentation before deploying to production.
-Zoom regularly updates their security policies, so please verify your implementation against the most current documentation before deploying to production.
+Zoom regularly updates security policies, so please verify your implementation against the most current documentation before deploying to production.
