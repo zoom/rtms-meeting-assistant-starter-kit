@@ -13,7 +13,7 @@ The user has asked the following question or query:
 <query/>
 Your task:
 - First, answer the query clearly and professionally based on the meeting summaries.
-- Then, output an XML block listing all meeting UUIDs and timestamps where the discussed topic or entity appears.
+- Then, output an XML block listing all stream IDs and timestamps where the discussed topic or entity appears. Use the stream ID values from the summaries (these are the identifiers used as filenames, not the meeting UUIDs).
 
 Your output **must** follow this exact structure:
 

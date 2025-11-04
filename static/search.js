@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
         results.innerHTML = `<div style="white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word;">${result}</div>`;
 
         // Extract stream IDs from the result using regex
-        const streamIdRegex = /<STREAM_ID>([^<]+)<\/STREAM_ID>/gi;
+        const streamIdRegex = /<stream_id>([^<]+)<\/stream_id>/gi;
         const foundStreamIds = [];
         let match;
         while ((match = streamIdRegex.exec(result)) !== null) {
