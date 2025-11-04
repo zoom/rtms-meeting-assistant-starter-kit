@@ -19,8 +19,7 @@ import { writeTranscriptToVtt } from './writeTranscriptToVtt.js';
 //used for saving screenshare 
 import { handleShareData, generatePDFAndText } from './saveSharescreen.js';
 
-//used for communication with openrouter
-import { chatWithOpenRouter,chatWithOpenRouterFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting } from './chatWithOpenrouter.js';
+
 
 //video process with ffmpeg post meeting
 import { convertMeetingMedia } from './convertMeetingMedia.js';
@@ -32,6 +31,35 @@ import { sanitizeFileName } from './tool.js';
 
 // Load environment variables from a .env file
 dotenv.config();
+
+
+// Dynamic AI provider loading based on .env setting
+let aiFunctions = {};
+
+async function loadAIProvider() {
+  const provider = process.env.AI_PROVIDER || 'openrouter';
+
+  if (provider === 'gemma') {
+    console.log('🔄 Loading Gemma provider...');
+    const { chatWithGemma, chatWithGemmaFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting } = await import('./chatWithGemma.js');
+    aiFunctions = { chat: chatWithGemma, chatFast: chatWithGemmaFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting };
+  } else if (provider === 'qwen') {
+    console.log('🔄 Loading Qwen provider...');
+    const { chatWithQwen, chatWithQwenFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting } = await import('./chatWithQwen.js');
+    aiFunctions = { chat: chatWithQwen, chatFast: chatWithQwenFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting };
+  } else if (provider === 'deepseek') {
+    console.log('🔄 Loading DeepSeek provider...');
+    const { chatWithDeepSeek, chatWithDeepSeekFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting } = await import('./chatWithDeepSeek.js');
+    aiFunctions = { chat: chatWithDeepSeek, chatFast: chatWithDeepSeekFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting };
+  } else {
+    console.log('🔄 Loading OpenRouter provider...');
+    const { chatWithOpenRouter, chatWithOpenRouterFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting } = await import('./chatWithOpenrouter.js');
+    aiFunctions = { chat: chatWithOpenRouter, chatFast: chatWithOpenRouterFast, generateDialogSuggestions, analyzeSentiment, generateRealTimeSummary, queryCurrentMeeting };
+  }
+
+  console.log(`✅ AI provider loaded: ${provider}`);
+}
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -165,7 +193,7 @@ app.post(WEBHOOK_PATH, async (req, res) => {
           .replace(/\{\{stream_id\}\}/g, rtms_stream_id)
           .replace(/\{\{TODAYDATE\}\}/g, todayDate);
 
-        const summary = await chatWithOpenRouter(filledPrompt, undefined, imageBase64Array);
+        const summary = await aiFunctions.chat(filledPrompt, undefined, imageBase64Array);
         fs.mkdirSync('meeting_summary', { recursive: true });
         fs.writeFileSync(`meeting_summary/${safeStreamID}.md`, summary);
         console.log(`✅ Summary generated and saved for stream ${rtms_stream_id} at meeting_summary/${safeStreamID}.md`);
@@ -582,7 +610,7 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safestreamId, streamId, 
 
         let { user_id, user_name, data: audioData, timestamp } = msg.content;
         let buffer = Buffer.from(audioData, 'base64');
-        console.log(`Processing audio data for user ${user_name} (ID: ${user_id}), buffer size: ${buffer.length} bytes`);
+        //console.log(`Processing audio data for user ${user_name} (ID: ${user_id}), buffer size: ${buffer.length} bytes`);
         saveRawAudioAdvance(buffer, streamId, user_id, Date.now()); // Primary method
 
       }
@@ -696,7 +724,7 @@ app.post('/api/meeting-query', async (req, res) => {
     }
 
     const transcript = fs.readFileSync(vttPath, 'utf-8');
-    const answer = await queryCurrentMeeting(transcript, query);
+    const answer = await aiFunctions.queryCurrentMeeting(transcript, query);
 
     res.json({ answer });
   } catch (error) {
@@ -746,9 +774,9 @@ app.post('/search', async (req, res) => {
       .replace(/\{\{query\}\}/g, query);
     console.log('Filled prompt length:', filledPrompt.length);
 
-    console.log('Calling OpenRouter with query');
+    console.log('Calling LLM with query');
     // Call OpenRouter
-    const answer = await chatWithOpenRouterFast(filledPrompt);
+    const answer = await aiFunctions.chatFast(filledPrompt);
     console.log('Received answer from OpenRouter, length:', answer.length);
 
     console.log('Sending response to client');
@@ -894,16 +922,22 @@ function broadcastToWebSocketClients(message, streamId = null) {
   }
 }
 
-// AI Processing scheduler with caching (15-second intervals)
+// AI Processing scheduler with caching (configurable intervals)
 function scheduleAIProcessing(streamId, meetingUuid) {
   const now = Date.now();
   const cacheKey = streamId;
   const cache = aiCache.get(cacheKey) || {};
 
    const safeStreamId= sanitizeFileName(streamId);
-  
-  // Only process if 15+ seconds since last update
-  if (!cache.lastUpdated || (now - cache.lastUpdated) > 15000) {
+
+  // Get configurable interval from environment (default: 15000ms = 15 seconds)
+  const aiProcessingInterval = parseInt(process.env.AI_PROCESSING_INTERVAL_MS) || 30000;
+
+  // Get configurable stagger delay from environment (default: 500ms = 0.5 seconds)
+  const aiFunctionStagger = parseInt(process.env.AI_FUNCTION_STAGGER_MS) || 5000;
+
+  // Only process if configured interval has passed since last update
+  if (!cache.lastUpdated || (now - cache.lastUpdated) > aiProcessingInterval) {
     console.log('🧠 Starting AI processing for stream:', streamId);
 
     // Read full VTT transcript for AI context
@@ -936,141 +970,162 @@ function scheduleAIProcessing(streamId, meetingUuid) {
       }
     }
 
-    // Process AI in non-blocking way
-    Promise.all([
-      generateDialogSuggestions(currentVTT),
-      analyzeSentiment(currentVTT),
-      generateRealTimeSummary(currentVTT, eventsLog, imageBase64Array, streamId,meetingUuid)
-    ]).then(([dialogSuggestions, sentimentAnalysis, realTimeSummary]) => {
-      // Update cache
-      cache.dialog = dialogSuggestions;
-      cache.sentiment = sentimentAnalysis;
-      cache.summary = realTimeSummary;
-      cache.lastUpdated = now;
-      aiCache.set(cacheKey, cache);
+    // Process AI functions with staggered timing to avoid clustering
+    (async () => {
+      try {
+        console.log('🤖 Starting staggered AI processing...');
 
-      console.log('✅ AI processing complete, broadcasting results');
+        // Start all functions but with configurable delays between them
+        const dialogPromise = aiFunctions.generateDialogSuggestions(currentVTT);
 
-      // Broadcast AI results to clients
-      broadcastToWebSocketClients({
-        type: 'ai_dialog',
-        suggestions: dialogSuggestions
-      }, streamId);
+        // Wait for stagger delay before starting sentiment analysis
+        await new Promise(resolve => setTimeout(resolve, aiFunctionStagger));
+        const sentimentPromise = aiFunctions.analyzeSentiment(currentVTT);
 
-      broadcastToWebSocketClients({
-        type: 'sentiment',
-        analysis: sentimentAnalysis
-      }, streamId);
+        // Wait another stagger delay before starting summary generation
+        await new Promise(resolve => setTimeout(resolve, aiFunctionStagger));
+        const summaryPromise = aiFunctions.generateRealTimeSummary(currentVTT, eventsLog, imageBase64Array, streamId, meetingUuid);
 
-      broadcastToWebSocketClients({
-        type: 'meeting_summary',
-        summary: realTimeSummary
-      }, streamId);
+        // Wait for all to complete
+        const [dialogSuggestions, sentimentAnalysis, realTimeSummary] = await Promise.all([
+          dialogPromise, sentimentPromise, summaryPromise
+        ]);
 
-    }).catch(err => {
-      console.error('❌ AI processing error:', err);
-    });
+        // Update cache
+        cache.dialog = dialogSuggestions;
+        cache.sentiment = sentimentAnalysis;
+        cache.summary = realTimeSummary;
+        cache.lastUpdated = now;
+        aiCache.set(cacheKey, cache);
+
+        console.log('✅ AI processing complete, broadcasting results');
+
+        // Broadcast AI results to clients
+        broadcastToWebSocketClients({
+          type: 'ai_dialog',
+          suggestions: dialogSuggestions
+        }, streamId);
+
+        broadcastToWebSocketClients({
+          type: 'sentiment',
+          analysis: sentimentAnalysis
+        }, streamId);
+
+        broadcastToWebSocketClients({
+          type: 'meeting_summary',
+          summary: realTimeSummary
+        }, streamId);
+
+      } catch (err) {
+        console.error('❌ AI processing error:', err);
+      }
+    })();
   } else {
     console.log('⏳ AI cache still fresh, skipping processing');
   }
 }
 
 // Start the server and listen on the specified port
-const server = app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-  console.log(`Webhook endpoint available at http://localhost:${port}${WEBHOOK_PATH}`);
-});
+(async () => {
+  // Initialize AI provider before starting server
+  await loadAIProvider();
 
-// Initialize WebSocket server for client connections
-const wss = new WebSocketServer({
-  server,
-  perMessageDeflate: false
-});
-
-wss.on('connection', (ws, request) => {
-  console.log('🖥️ Client connected to WebSocket server');
-
-  // Extract meeting UUID from query parameters (e.g., ?meeting=uuid123)
-  const url = new URL(request.url, `ws://localhost:${port}`);
-  const meetingUuid = url.searchParams.get('meeting');
-
-  console.log(`Client joined meeting: ${meetingUuid || 'global'}`);
-
-  // Store connection by meeting UUID
-  if (meetingUuid) {
-    if (!clientWebSocketConnections.has(meetingUuid)) {
-      clientWebSocketConnections.set(meetingUuid, []);
-    }
-    clientWebSocketConnections.get(meetingUuid).push(ws);
-  }
-
-  // Set up keep-alive ping/pong
-  const pingInterval = setInterval(() => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.ping();
-    }
-  }, 30000); // Ping every 30 seconds
-
-  ws.on('pong', () => {
-    // Client responded to ping - connection is healthy
-    console.log('🔄 Pong received from client');
+  const server = app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+    console.log(`Webhook endpoint available at http://localhost:${port}${WEBHOOK_PATH}`);
   });
 
-  ws.on('message', (data) => {
-    try {
-      const message = JSON.parse(data.toString());
-      console.log('📨 Received client message:', message);
-      // Handle client messages if needed (currently just broadcasting)
-    } catch (err) {
-      console.error('❌ Error parsing client message:', err);
-    }
+  // Initialize WebSocket server for client connections
+  const wss = new WebSocketServer({
+    server,
+    perMessageDeflate: false
   });
 
-  ws.on('close', (code, reason) => {
-    console.log(`📴 Client disconnected: ${code} ${reason}`);
+  wss.on('connection', (ws, request) => {
+    console.log('🖥️ Client connected to WebSocket server');
 
-    // Remove from connection store
+    // Extract meeting UUID from query parameters (e.g., ?meeting=uuid123)
+    const url = new URL(request.url, `ws://localhost:${port}`);
+    const meetingUuid = url.searchParams.get('meeting');
+
+    console.log(`Client joined meeting: ${meetingUuid || 'global'}`);
+
+    // Store connection by meeting UUID
     if (meetingUuid) {
-      const clients = clientWebSocketConnections.get(meetingUuid) || [];
-      const index = clients.indexOf(ws);
-      if (index > -1) {
-        clients.splice(index, 1);
-        if (clients.length === 0) {
-          clientWebSocketConnections.delete(meetingUuid);
+      if (!clientWebSocketConnections.has(meetingUuid)) {
+        clientWebSocketConnections.set(meetingUuid, []);
+      }
+      clientWebSocketConnections.get(meetingUuid).push(ws);
+    }
+
+    // Set up keep-alive ping/pong
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.ping();
+      }
+    }, 30000); // Ping every 30 seconds
+
+    ws.on('pong', () => {
+      // Client responded to ping - connection is healthy
+      console.log('🔄 Pong received from client');
+    });
+
+    ws.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        console.log('📨 Received client message:', message);
+        // Handle client messages if needed (currently just broadcasting)
+      } catch (err) {
+        console.error('❌ Error parsing client message:', err);
+      }
+    });
+
+    ws.on('close', (code, reason) => {
+      console.log(`📴 Client disconnected: ${code} ${reason}`);
+
+      // Remove from connection store
+      if (meetingUuid) {
+        const clients = clientWebSocketConnections.get(meetingUuid) || [];
+        const index = clients.indexOf(ws);
+        if (index > -1) {
+          clients.splice(index, 1);
+          if (clients.length === 0) {
+            clientWebSocketConnections.delete(meetingUuid);
+          }
         }
       }
-    }
 
-    clearInterval(pingInterval);
+      clearInterval(pingInterval);
+    });
+
+    ws.on('error', (err) => {
+      console.error('❌ WebSocket client error:', err);
+    });
+
+    // Send welcome message
+    ws.send(JSON.stringify({
+      type: 'connected',
+      message: 'Connected to RTMS meeting intelligence server',
+      meeting: meetingUuid || 'global'
+    }));
   });
 
-  ws.on('error', (err) => {
-    console.error('❌ WebSocket client error:', err);
-  });
-
-  // Send welcome message
-  ws.send(JSON.stringify({
-    type: 'connected',
-    message: 'Connected to RTMS meeting intelligence server',
-    meeting: meetingUuid || 'global'
-  }));
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  wss.close(() => {
-    server.close(() => {
-      process.exit(0);
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    wss.close(() => {
+      server.close(() => {
+        process.exit(0);
+      });
     });
   });
-});
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  wss.close(() => {
-    server.close(() => {
-      process.exit(0);
+  process.on('SIGINT', () => {
+    console.log('SIGINT received, shutting down gracefully...');
+    wss.close(() => {
+      server.close(() => {
+        process.exit(0);
+      });
     });
   });
-});
+})();

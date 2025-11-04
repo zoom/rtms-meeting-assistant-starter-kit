@@ -64,6 +64,7 @@ Execution Instructions:
     - Do not mention any instructions mentioned in this prompt in the summary. You are your own unique analysis. 
 
 
-Output format: - Properly format it into a markdown document .md
+Output format: - Save this markdown document .md, but keep the topics in XML and not in the MD format
+
 
 Concentrate, deep thoughts, and use the computing power allocated to you to summary the meeting transcript and events given to you.
