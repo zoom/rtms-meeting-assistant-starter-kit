@@ -87,7 +87,7 @@ app.use((req, res, next) => {
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none';"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://appssdk.zoom.us; style-src 'self' 'unsafe-inline'; object-src 'none';"
   );
   next();
 });
@@ -669,6 +669,11 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, safestreamId, streamId, 
     }
   });
 }
+
+// GET / - Serve the search page
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'static', 'search.html'));
+});
 
 // GET /search - Serve the search page
 app.get('/search', (req, res) => {

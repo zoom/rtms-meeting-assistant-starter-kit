@@ -310,6 +310,7 @@
       <button class="tab-button active" data-tab="search-playback">Search and Playback</button>
       <button class="tab-button" data-tab="summaries">View All Summaries</button>
       <button class="tab-button" data-tab="realtime">Real-time</button>
+      <button class="tab-button" data-tab="zoom-apps-sdk">Zoom Apps SDK</button>
     </div>
 
     <!-- Tab Content -->
@@ -451,10 +452,135 @@
         </div>
       </div>
     </div>
+
+    <div id="zoom-apps-sdk" class="tab-content">
+      <div class="section">
+        <div class="heading">Zoom Apps SDK Context Information</div>
+        <div id="zoom-output">Initializing Zoom SDK...</div>
+      </div>
+
+      <div class="section">
+        <div class="heading">Send Message to Chat</div>
+        <div class="search-box">
+          <input type="text" id="chat-message" placeholder="Enter message to send to chat..." required>
+          <button id="send-chat-button">Send to Chat</button>
+        </div>
+        <div id="chat-status"></div>
+      </div>
+
+      <script>
+        (async () => {
+          // Wait for Zoom SDK to be available
+          let attempts = 0;
+          const maxAttempts = 50; // 5 seconds max wait
+          while (typeof zoomSdk === 'undefined' && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+          }
+
+          if (typeof zoomSdk === 'undefined') {
+            document.getElementById('zoom-output').innerHTML = `
+              <p style="color: red;">Zoom SDK not available. This tab requires the page to be loaded within a Zoom App context.</p>
+              <p style="color: gray;">If you're running this in a Zoom app, ensure the domain is added to the app's allowed domains in the Zoom Marketplace settings.</p>
+            `;
+            return;
+          }
+
+          try {
+            const configResponse = await zoomSdk.config({
+              version: '1.10.0',
+              capabilities: [
+                'getSupportedJsApis',
+                'getRunningContext',
+                'getMeetingContext',
+                'getUserContext',
+                'getMeetingUUID',
+                'getAppContext',
+                'sendMessageToChat'
+              ]
+            });
+
+            const supportedApis = await zoomSdk.getSupportedJsApis();
+            const runningContext = await zoomSdk.getRunningContext();
+            const meetingContext = await zoomSdk.getMeetingContext();
+            const userContext = await zoomSdk.getUserContext();
+            const meetingUUID = await zoomSdk.getMeetingUUID();
+            const appContext = await zoomSdk.getAppContext();
+
+            // Check if sendMessageToChat is supported in current context
+            const canSendToChat = ['inMeeting', 'inChat', 'inMeetingChat'].includes(runningContext);
+
+            document.getElementById('zoom-output').innerHTML = `
+              <h2>Supported JS APIs:</h2>
+              <pre>${JSON.stringify(supportedApis, null, 2)}</pre>
+
+              <h2>Running Context:</h2>
+              <pre>${JSON.stringify(runningContext, null, 2)}</pre>
+
+              <h2>Meeting Context:</h2>
+              <pre>${JSON.stringify(meetingContext, null, 2)}</pre>
+
+              <h2>User Context:</h2>
+              <pre>${JSON.stringify(userContext, null, 2)}</pre>
+
+              <h2>Meeting UUID:</h2>
+              <pre>${JSON.stringify(meetingUUID, null, 2)}</pre>
+
+              <h2>App Context:</h2>
+              <pre>${JSON.stringify(appContext, null, 2)}</pre>
+            `;
+
+            // Update chat section based on context
+            if (!canSendToChat) {
+              document.getElementById('chat-message').disabled = true;
+              document.getElementById('send-chat-button').disabled = true;
+              document.getElementById('chat-status').innerHTML = '<p style="color: orange;">Chat messaging is only available in meeting or chat contexts.</p>';
+            } else {
+              document.getElementById('chat-status').innerHTML = '<p style="color: blue;">Note: Ensure "sendMessageToChat" is enabled in your Zoom app\'s Marketplace capabilities.</p>';
+            }
+          } catch (error) {
+            console.error('Error retrieving Zoom context:', error);
+            document.getElementById('zoom-output').innerHTML = `
+              <p style="color: red;">An error occurred while retrieving Zoom context information.</p>
+              <pre style="color: red;">${error}</pre>
+            `;
+          }
+
+          // Handle chat button click
+          document.getElementById('send-chat-button').addEventListener('click', async () => {
+            const rawMessage = document.getElementById('chat-message').value;
+            const message = rawMessage.trim();
+            console.log('Raw message from input:', JSON.stringify(rawMessage));
+            console.log('Trimmed message:', JSON.stringify(message));
+            console.log('Message length:', message.length);
+            console.log('Message truthy:', !!message);
+
+            if (!message) {
+              document.getElementById('chat-status').innerHTML = '<p style="color: red;">Please enter a message.</p>';
+              return;
+            }
+
+            const statusDiv = document.getElementById('chat-status');
+            statusDiv.innerHTML = 'Sending message...';
+
+            try {
+              console.log('Calling zoomSdk.sendMessageToChat with:', JSON.stringify(message));
+              await zoomSdk.sendMessageToChat({ message: message });
+              statusDiv.innerHTML = '<p style="color: green;">Message sent successfully!</p>';
+              document.getElementById('chat-message').value = '';
+            } catch (error) {
+              console.error('Error sending message to chat:', error);
+              statusDiv.innerHTML = `<p style="color: red;">Failed to send message: ${error.message}</p>`;
+            }
+          });
+        })();
+      </script>
+    </div>
   </div>
 
 
 
+  <script src="https://appssdk.zoom.us/sdk.js"></script>
   <script src="static/d3.v7.min.js"></script>
   <script src="static/search.js"></script>
 </body>
