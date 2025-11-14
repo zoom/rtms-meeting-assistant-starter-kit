@@ -480,8 +480,8 @@
 
           if (typeof zoomSdk === 'undefined') {
             document.getElementById('zoom-output').innerHTML = `
-              <p style="color: red;">Zoom SDK not available. This tab requires the page to be loaded within a Zoom App context.</p>
-              <p style="color: gray;">If you're running this in a Zoom app, ensure the domain is added to the app's allowed domains in the Zoom Marketplace settings.</p>
+              <p style="color: red;">Zoom SDK is undefined. This tab requires the page to be loaded within a Zoom App context.</p>
+              <p style="color: gray;">If you're running this in a Zoom app, ensure the domain is added to the app's Domain Allow List in the Surface tab in Zoom Marketplace settings. Literally add: appssdk.zoom.us/)</p>
             `;
             return;
           }
