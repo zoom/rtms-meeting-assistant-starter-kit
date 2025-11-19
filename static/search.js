@@ -753,7 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Ensure WebSocket URL has proper protocol
       if (!websocketUrl.startsWith('ws://') && !websocketUrl.startsWith('wss://')) {
         // Default to ws:// for local development, wss:// for remote servers
-        const isLocalhost = websocketUrl.startsWith('localhost') || websocketUrl.startsWith('127.0.0.1') || websocketUrl.includes('rtms.asdc.cc') === false;
+        const isLocalhost = websocketUrl.startsWith('localhost') || websocketUrl.startsWith('127.0.0.1') ;
         websocketUrl = (isLocalhost ? 'ws://' : 'wss://') + websocketUrl;
       }
 

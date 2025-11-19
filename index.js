@@ -704,7 +704,7 @@ app.get('/api/config', (req, res) => {
   }
 
   res.json({
-    websocketUrl: process.env.WEBSOCKET_URL || 'rtms.asdc.cc/client-websocket',
+    websocketUrl: process.env.WEBSOCKET_URL || 'your.ngrok.url',
     meetingUuid: meetingUuid,
     availableMeetings: availableMeetings
   });
