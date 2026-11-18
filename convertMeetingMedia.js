@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { sanitizeFileName } from './tool.js';
 
-const runFFmpegCommand = promisify(exec);
+// argv-array execution: no shell, so no injection surface
+const runFFmpeg = promisify(execFile);
 
 // Asynchronous function to convert meeting media files
 export async function convertMeetingMedia(streamId) {
@@ -25,11 +26,11 @@ export async function convertMeetingMedia(streamId) {
     if (file.endsWith('.raw')) {
       // Convert raw PCM to WAV
       const outputWav = fullPath.replace('.raw', '.wav');
-      const command = `ffmpeg -f s16le -ar 16000 -ac 1 -i "${fullPath}" "${outputWav}"`;
+      const args = ['-f', 's16le', '-ar', '16000', '-ac', '1', '-i', fullPath, '-y', outputWav];
 
       console.log(`🎵 Converting audio: ${file} -> ${path.basename(outputWav)}`);
       try {
-        await runFFmpegCommand(command);
+        await runFFmpeg('ffmpeg', args);
       } catch (error) {
         console.error('❌ Error converting audio:', error.message);
       }
@@ -38,11 +39,11 @@ export async function convertMeetingMedia(streamId) {
     if (file.endsWith('.h264')) {
       // Convert H264 to MP4
       const outputMp4 = fullPath.replace('.h264', '.mp4');
-      const command = `ffmpeg -framerate 25 -i "${fullPath}" -c:v copy "${outputMp4}"`;
+      const args = ['-framerate', '25', '-i', fullPath, '-c:v', 'copy', '-y', outputMp4];
 
       console.log(`🎥 Converting video: ${file} -> ${path.basename(outputMp4)}`);
       try {
-        await runFFmpegCommand(command);
+        await runFFmpeg('ffmpeg', args);
       } catch (error) {
         console.error('❌ Error converting video:', error.message);
       }

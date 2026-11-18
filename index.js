@@ -28,6 +28,14 @@ import { muxFirstAudioVideo } from './muxFirstAudioVideo.js';
 
 import { sanitizeFileName } from './tool.js';
 
+// webhook signature verification + Zoom endpoint validation
+import {
+  captureRawBody,
+  buildUrlValidationResponse,
+  verifyZoomWebhookRequest,
+  isValidZoomStreamUrl
+} from './webhookSecurity.js';
+
 
 
 // Load environment variables from a .env file
@@ -75,7 +83,7 @@ const WEBHOOK_PATH = process.env.WEBHOOK_PATH || '/webhook';
 
 
 // Middleware to parse JSON and URL-encoded bodies
-app.use(express.json());
+app.use(express.json({ verify: captureRawBody }));
 app.use(express.urlencoded({ extended: true }));
 
 // Security headers middleware
@@ -108,24 +116,36 @@ const aiCache = new Map();
 
 // Handle POST requests to the webhook endpoint
 app.post(WEBHOOK_PATH, async (req, res) => {
-  // Respond with HTTP 200 status
-  res.sendStatus(200);
   console.log('RTMS Webhook received:', JSON.stringify(req.body, null, 2));
   const { event, payload } = req.body;
 
+  // Verify Zoom's signature (x-zm-signature) before trusting the payload.
+  // The endpoint.url_validation challenge is answered without verification,
+  // matching Zoom's validation handshake.
+  if (event !== 'endpoint.url_validation') {
+    const verification = verifyZoomWebhookRequest(req, ZOOM_SECRET_TOKEN);
+    if (!verification.ok) {
+      const status = verification.reason === 'missing_webhook_secret_token' ? 500 : 401;
+      console.error('❌ Webhook verification failed:', verification.reason);
+      return res.status(status).json({ error: 'invalid_zoom_webhook', reason: verification.reason });
+    }
+  }
+
   // Handle URL validation event
   if (event === 'endpoint.url_validation' && payload?.plainToken) {
-    // Generate a hash for URL validation using the plainToken and a secret token
-    const hash = crypto
-      .createHmac('sha256', ZOOM_SECRET_TOKEN)
-      .update(payload.plainToken)
-      .digest('hex');
-    console.log('Responding to URL validation challenge');
-    return res.json({
-      plainToken: payload.plainToken,
-      encryptedToken: hash,
-    });
+    // Validate the challenge token and sign it with the webhook secret.
+    try {
+      const response = buildUrlValidationResponse(payload.plainToken, ZOOM_SECRET_TOKEN);
+      console.log('Responding to URL validation challenge');
+      return res.json(response);
+    } catch (error) {
+      console.error('❌ URL validation failed:', error.message);
+      return res.status(400).json({ error: 'invalid_plain_token' });
+    }
   }
+
+  // Acknowledge accepted deliveries before starting RTMS work
+  res.sendStatus(200);
 
   // Handle RTMS started event
   if (event === 'meeting.rtms_started') {
@@ -238,6 +258,11 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
 
   const safeStreamId = sanitizeFileName(streamId);
   console.log('Sanitized Meeting UUID:', safeStreamId);
+
+  if (!isValidZoomStreamUrl(serverUrl)) {
+    console.error('❌ Invalid or non-Zoom server_urls, skipping connection:', serverUrl);
+    return;
+  }
 
   const ws = new WebSocket(serverUrl);
   console.log('WebSocket created successfully');

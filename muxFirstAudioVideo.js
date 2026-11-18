@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { sanitizeFileName } from './tool.js';
 
-const runFFmpegCommand = promisify(exec);
+// argv-array execution: no shell, so no injection surface
+const runFFmpeg = promisify(execFile);
 
 // Asynchronous function to mux the first audio and video files
 export async function muxFirstAudioVideo(streamId) {
@@ -31,12 +32,29 @@ export async function muxFirstAudioVideo(streamId) {
   const outputPath = path.join(folderPath, 'final_output.mp4');
 
   const offsetSeconds = 0.0; // You can adjust this offset
-  const command = `ffmpeg -i "${audioPath}" -i "${videoPath}" -itsoffset ${offsetSeconds} -i "${audioPath}" -map 1:v:0 -map 2:a:0 -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 64k -ar 16000 -ac 1 -shortest "${outputPath}"`;
+  const args = [
+    '-i', audioPath,
+    '-i', videoPath,
+    '-itsoffset', String(offsetSeconds),
+    '-i', audioPath,
+    '-map', '1:v:0',
+    '-map', '2:a:0',
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '23',
+    '-c:a', 'aac',
+    '-b:a', '64k',
+    '-ar', '16000',
+    '-ac', '1',
+    '-shortest',
+    '-y',
+    outputPath
+  ];
 
   console.log(`🎥 Muxing ${mp4File} + ${wavFile} -> final_output.mp4`);
 
   try {
-    await runFFmpegCommand(command);
+    await runFFmpeg('ffmpeg', args);
     console.log('✅ Muxing completed. Output file created:', outputPath);
   } catch (error) {
     console.error('❌ Muxing failed:', error.message);

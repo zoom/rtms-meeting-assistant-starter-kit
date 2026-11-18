@@ -16,9 +16,10 @@ function generateSilentAudioFrame(sampleRate, durationMs) {
 export function saveRawAudio(chunk, streamId, user_id, timestamp) {
 
     const safeStreamId = sanitizeFileName(streamId);
+    const safeUserId = sanitizeFileName(user_id);
 
     // Build path: recordings/{streamId}/{userId}.raw
-    const filePath = `recordings/${safeStreamId}/${user_id}.raw`;
+    const filePath = `recordings/${safeStreamId}/${safeUserId}.raw`;
 
     // If the folder doesn't exist yet, create it
     const dir = path.dirname(filePath);
